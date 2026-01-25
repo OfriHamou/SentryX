@@ -5,7 +5,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Your Jetson bridge address (Jetson runs the bridge)
+// Your Jetson bridge address (Jetson runs the bridge) //to do -> env variable, jetson ip can change 
 const JETSON_BASE_URL = process.env.JETSON_BASE_URL || "http://192.168.1.247:5000";
 
 // quick check endpoint
