@@ -6,22 +6,29 @@ import time
 
 app = Flask(__name__)
 
-CAMERA_INDEX = 0
 JPEG_QUALITY = 70
-OUTPUT_WIDTH = 960
+OUTPUT_WIDTH = 1280
 OUTPUT_HEIGHT = 720
 
 camera = None
 camera_lock = threading.Lock()
 
 
+def build_pipeline():
+    return (
+        "nvarguscamerasrc ! "
+        "video/x-raw(memory:NVMM), width=1280, height=720, framerate=30/1, format=NV12 ! "
+        "nvvidconv ! "
+        "video/x-raw, format=BGRx ! "
+        "videoconvert ! "
+        "video/x-raw, format=BGR ! "
+        "appsink max-buffers=1 drop=true sync=false"
+    )
+
+
 def open_camera():
-    cap = cv2.VideoCapture(CAMERA_INDEX)
-
-    # Try to reduce output size from the very large default frame
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, OUTPUT_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, OUTPUT_HEIGHT)
-
+    cap = cv2.VideoCapture(build_pipeline(), cv2.CAP_GSTREAMER)
+    time.sleep(2)
     return cap
 
 
@@ -41,9 +48,6 @@ def generate_frames():
         if not ok or frame is None:
             time.sleep(0.1)
             continue
-
-        # Resize again just in case the camera ignores the requested size
-        frame = cv2.resize(frame, (OUTPUT_WIDTH, OUTPUT_HEIGHT))
 
         ok, buffer = cv2.imencode(
             ".jpg",
@@ -68,7 +72,7 @@ def health():
     return jsonify({
         "ok": True,
         "camera_opened": bool(cap is not None and cap.isOpened()),
-        "source": "/dev/video0"
+        "source": "nvarguscamerasrc"
     })
 
 
