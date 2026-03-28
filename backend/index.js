@@ -1,13 +1,17 @@
 const express = require("express");
 const cors = require("cors");
+const { Readable } = require("stream");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Jetson bridge base URL
-// Better later: move robot IP to .env because it can change
+// Jetson control bridge
 const JETSON_BASE_URL =
   process.env.JETSON_BASE_URL || "http://192.168.7.132:5000";
+
+// Jetson video bridge
+const JETSON_VIDEO_URL =
+  process.env.JETSON_VIDEO_URL || "http://192.168.7.132:5001";
 
 app.use(cors());
 app.use(express.json());
@@ -75,7 +79,39 @@ app.get("/api/robot/battery", async (req, res) => {
   return forwardJson(res, `${JETSON_BASE_URL}/api/battery`);
 });
 
+// Backend -> Jetson video bridge (MJPEG proxy)
+app.get("/api/robot/video", async (req, res) => {
+  try {
+    const response = await fetch(`${JETSON_VIDEO_URL}/video_feed`);
+
+    if (!response.ok || !response.body) {
+      return res.status(502).json({
+        ok: false,
+        error: "Failed to open robot video stream",
+      });
+    }
+
+    res.setHeader(
+      "Content-Type",
+      response.headers.get("content-type") ||
+        "multipart/x-mixed-replace; boundary=frame"
+    );
+
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (error) {
+    return res.status(502).json({
+      ok: false,
+      error: "Failed reaching Jetson video bridge",
+      details: String(error),
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend: http://localhost:${PORT}`);
-  console.log(`Jetson bridge: ${JETSON_BASE_URL}`);
+  console.log(`Jetson control bridge: ${JETSON_BASE_URL}`);
+  console.log(`Jetson video bridge: ${JETSON_VIDEO_URL}`);
 });

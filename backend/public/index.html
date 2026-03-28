@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 700px;
+      max-width: 900px;
       margin: 40px auto;
       padding: 0 20px;
       background: #f7f7f7;
@@ -23,7 +23,7 @@
       border-radius: 12px;
       padding: 20px;
       margin-bottom: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     }
 
     .status-row {
@@ -75,11 +75,20 @@
       overflow-x: auto;
       font-size: 13px;
     }
+
+    #videoFeed {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+      background: #000;
+    }
   </style>
 </head>
 <body>
   <h1>SentryX Test Control</h1>
-  <p class="muted">Temporary browser test page for Milestone 2</p>
+  <p class="muted">Temporary browser test page for Milestone 3</p>
 
   <div class="card">
     <h2>Robot Status</h2>
@@ -90,6 +99,16 @@
     <div class="status-row">Battery status: <strong id="batteryStatus">...</strong></div>
 
     <button class="wide" onclick="refreshStatus()">Refresh status</button>
+  </div>
+
+  <div class="card">
+    <h2>Live Video</h2>
+    <img
+      id="videoFeed"
+      src="/api/robot/video"
+      alt="Robot live stream"
+    />
+    <p class="muted">Video is streamed from the robot through the backend.</p>
   </div>
 
   <div class="card">
@@ -115,7 +134,7 @@
   </div>
 
   <script>
-    async function showResponse(data) {
+    function showResponse(data) {
       document.getElementById("output").textContent =
         JSON.stringify(data, null, 2);
     }
@@ -175,11 +194,7 @@
         document.getElementById("batteryStatus").textContent =
           battery.ok ? battery.status : (battery.error || "Unavailable");
 
-        showResponse({
-          backend,
-          health,
-          battery
-        });
+        showResponse({ backend, health, battery });
       } catch (err) {
         document.getElementById("backendHealth").textContent = "Disconnected";
         document.getElementById("bridgeHealth").textContent = "Disconnected";
