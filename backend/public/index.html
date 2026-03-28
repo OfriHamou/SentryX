@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SentryX Test Control</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f7f7f7;
+      color: #222;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .status-row {
+      margin: 8px 0;
+      font-size: 16px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(3, 120px);
+      gap: 12px;
+      justify-content: center;
+      margin-top: 16px;
+    }
+
+    button {
+      padding: 14px 16px;
+      border: none;
+      border-radius: 10px;
+      background: #222;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .stop {
+      background: #c62828;
+    }
+
+    .wide {
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 14px;
+    }
+
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 10px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>SentryX Test Control</h1>
+  <p class="muted">Temporary browser test page for Milestone 2</p>
+
+  <div class="card">
+    <h2>Robot Status</h2>
+    <div class="status-row">Backend health: <strong id="backendHealth">...</strong></div>
+    <div class="status-row">Bridge health: <strong id="bridgeHealth">...</strong></div>
+    <div class="status-row">Battery data received: <strong id="batteryReceived">...</strong></div>
+    <div class="status-row">Battery voltage: <strong id="batteryVoltage">...</strong></div>
+    <div class="status-row">Battery status: <strong id="batteryStatus">...</strong></div>
+
+    <button class="wide" onclick="refreshStatus()">Refresh status</button>
+  </div>
+
+  <div class="card">
+    <h2>Manual Control</h2>
+    <div class="controls">
+      <div></div>
+      <button onclick="sendMove(0.8, 0.0)">Forward</button>
+      <div></div>
+
+      <button onclick="sendMove(0.0, -0.8)">Left</button>
+      <button class="stop" onclick="sendStop()">Stop</button>
+      <button onclick="sendMove(0.0, 0.8)">Right</button>
+
+      <div></div>
+      <button onclick="sendMove(-0.8, 0.0)">Backward</button>
+      <div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Last Response</h2>
+    <pre id="output">Waiting...</pre>
+  </div>
+
+  <script>
+    async function showResponse(data) {
+      document.getElementById("output").textContent =
+        JSON.stringify(data, null, 2);
+    }
+
+    async function sendMove(speed, rotation) {
+      try {
+        const res = await fetch("/api/robot/move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ speed, rotation })
+        });
+
+        const data = await res.json();
+        showResponse(data);
+      } catch (err) {
+        showResponse({ ok: false, error: String(err) });
+      }
+    }
+
+    async function sendStop() {
+      try {
+        const res = await fetch("/api/robot/stop", {
+          method: "POST"
+        });
+
+        const data = await res.json();
+        showResponse(data);
+      } catch (err) {
+        showResponse({ ok: false, error: String(err) });
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const [backendRes, healthRes, batteryRes] = await Promise.all([
+          fetch("/health"),
+          fetch("/api/robot/health"),
+          fetch("/api/robot/battery")
+        ]);
+
+        const backend = await backendRes.json();
+        const health = await healthRes.json();
+        const battery = await batteryRes.json();
+
+        document.getElementById("backendHealth").textContent =
+          backend.ok ? "Connected" : "Disconnected";
+
+        document.getElementById("bridgeHealth").textContent =
+          health.ok ? "Connected" : "Disconnected";
+
+        document.getElementById("batteryReceived").textContent =
+          health.battery_data_received ? "Yes" : "No";
+
+        document.getElementById("batteryVoltage").textContent =
+          battery.ok ? `${battery.voltage} V` : "Unavailable";
+
+        document.getElementById("batteryStatus").textContent =
+          battery.ok ? battery.status : (battery.error || "Unavailable");
+
+        showResponse({
+          backend,
+          health,
+          battery
+        });
+      } catch (err) {
+        document.getElementById("backendHealth").textContent = "Disconnected";
+        document.getElementById("bridgeHealth").textContent = "Disconnected";
+        document.getElementById("batteryReceived").textContent = "Unknown";
+        document.getElementById("batteryVoltage").textContent = "Unavailable";
+        document.getElementById("batteryStatus").textContent = "Unavailable";
+
+        showResponse({ ok: false, error: String(err) });
+      }
+    }
+
+    refreshStatus();
+    setInterval(refreshStatus, 5000);
+  </script>
+</body>
+</html>
