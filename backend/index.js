@@ -2,37 +2,80 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Jetson bridge base URL
+// Better later: move robot IP to .env because it can change
+const JETSON_BASE_URL =
+  process.env.JETSON_BASE_URL || "http://192.168.7.132:5000";
+
 app.use(cors());
 app.use(express.json());
+app.use(express.static("public"));
 
-// Your Jetson bridge address (Jetson runs the bridge) //to do -> env variable, jetson ip can change 
-const JETSON_BASE_URL = process.env.JETSON_BASE_URL || "http://192.168.1.247:5000";
+async function forwardJson(res, url, options = {}) {
+  try {
+    const response = await fetch(url, options);
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (error) {
+    return res.status(502).json({
+      ok: false,
+      error: "Failed reaching Jetson bridge",
+      details: String(error),
+    });
+  }
+}
 
-// quick check endpoint
-app.get("/health", (req, res) => res.json({ ok: true }));
+// Backend health
+app.get("/health", (req, res) => {
+  res.json({ ok: true, service: "backend" });
+});
 
-// Milestone endpoint: Node -> Jetson bridge
+// Backend -> Jetson bridge -> ROS motor move
 app.post("/api/robot/move", async (req, res) => {
   try {
     const { speed, rotation } = req.body;
 
-    // Validate input early (MVC controller responsibility)
     if (typeof speed !== "number" || typeof rotation !== "number") {
-      return res.status(400).json({ error: "speed and rotation must be numbers" });
+      return res.status(400).json({
+        ok: false,
+        error: "speed and rotation must be numbers",
+      });
     }
 
-    // Forward to Jetson bridge API
-    const r = await fetch(`${JETSON_BASE_URL}/api/move`, {
+    return forwardJson(res, `${JETSON_BASE_URL}/api/move`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ speed, rotation }),
     });
-
-    const data = await r.json().catch(() => ({}));
-    return res.status(r.status).json(data);
-  } catch (e) {
-    return res.status(500).json({ error: "Failed reaching Jetson bridge", details: String(e) });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: "Failed reaching Jetson bridge",
+      details: String(error),
+    });
   }
 });
 
-app.listen(3001, () => console.log("Backend: http://localhost:3001"));
+// Backend -> Jetson bridge stop
+app.post("/api/robot/stop", async (req, res) => {
+  return forwardJson(res, `${JETSON_BASE_URL}/api/stop`, {
+    method: "POST",
+  });
+});
+
+// Backend -> Jetson bridge health
+app.get("/api/robot/health", async (req, res) => {
+  return forwardJson(res, `${JETSON_BASE_URL}/health`);
+});
+
+// Backend -> Jetson bridge battery
+app.get("/api/robot/battery", async (req, res) => {
+  return forwardJson(res, `${JETSON_BASE_URL}/api/battery`);
+});
+
+app.listen(PORT, () => {
+  console.log(`Backend: http://localhost:${PORT}`);
+  console.log(`Jetson bridge: ${JETSON_BASE_URL}`);
+});
