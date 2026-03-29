@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 import cv2
 import os
 import json
@@ -164,6 +165,10 @@ def get_latest_event():
 @app.route("/events", methods=["GET"])
 def get_events():
     return jsonify({"ok": True, "events": list_events()})
+
+@app.route("/image/<path:filename>", methods=["GET"])
+def get_image(filename):
+    return send_from_directory(EVENTS_DIR, filename)
 
 
 if __name__ == "__main__":
