@@ -13,6 +13,10 @@ const JETSON_BASE_URL =
 const JETSON_VIDEO_URL =
   process.env.JETSON_VIDEO_URL || "http://192.168.7.132:5001";
 
+// Jetson detection bridge
+const JETSON_DETECTION_URL =
+  process.env.JETSON_DETECTION_URL || "http://192.168.7.132:5002";
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
@@ -105,6 +109,43 @@ app.get("/api/robot/video", async (req, res) => {
     return res.status(502).json({
       ok: false,
       error: "Failed reaching Jetson video bridge",
+      details: String(error),
+    });
+  }
+});
+
+app.get("/api/robot/events", async (req, res) => {
+  return forwardJson(res, `${JETSON_DETECTION_URL}/events`);
+});
+
+app.get("/api/robot/events/latest", async (req, res) => {
+  return forwardJson(res, `${JETSON_DETECTION_URL}/latest_event`);
+});
+
+app.get("/api/robot/events/image/:filename", async (req, res) => {
+  try {
+    const response = await fetch(
+      `${JETSON_DETECTION_URL}/image/${encodeURIComponent(req.params.filename)}`
+    );
+
+    if (!response.ok || !response.body) {
+      return res.status(404).json({
+        ok: false,
+        error: "Event image not found",
+      });
+    }
+
+    res.setHeader(
+      "Content-Type",
+      response.headers.get("content-type") || "image/jpeg"
+    );
+
+    const { Readable } = require("stream");
+    Readable.fromWeb(response.body).pipe(res);
+  } catch (error) {
+    return res.status(502).json({
+      ok: false,
+      error: "Failed reaching Jetson detection bridge",
       details: String(error),
     });
   }
