@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import cv2
+import os
 
 
 class FaceDetector:
@@ -8,29 +9,31 @@ class FaceDetector:
         self.detect_height = detect_height
 
         if cascade_path is None:
-            cascade_path = cv2.data.haarcascades + "haarcascade_profileface.xml"
+            candidate_paths = [
+                "/usr/share/opencv4/haarcascades/haarcascade_profileface.xml",
+                "/usr/share/opencv/haarcascades/haarcascade_profileface.xml",
+                "haarcascade_profileface.xml",
+            ]
+
+            for path in candidate_paths:
+                if os.path.exists(path):
+                    cascade_path = path
+                    break
+
+        if cascade_path is None:
+            raise RuntimeError(
+                "Could not find haarcascade_profileface.xml. "
+                "Please locate it on the robot and set cascade_path explicitly."
+            )
 
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
 
         if self.face_cascade.empty():
             raise RuntimeError(f"Failed to load cascade classifier: {cascade_path}")
 
-    def detect_faces(self, frame):
-        """
-        Input:
-            frame: BGR image (numpy array)
+        self.cascade_path = cascade_path
 
-        Output:
-            list of detections like:
-            [
-                {
-                    "x": 100,
-                    "y": 80,
-                    "w": 120,
-                    "h": 120
-                }
-            ]
-        """
+    def detect_faces(self, frame):
         if frame is None:
             return []
 
