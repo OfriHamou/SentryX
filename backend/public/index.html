@@ -129,6 +129,21 @@
   </div>
 
   <div class="card">
+    <h2>Latest Event</h2>
+    <div class="status-row">Event type: <strong id="latestEventType">...</strong></div>
+    <div class="status-row">Timestamp: <strong id="latestEventTime">...</strong></div>
+    <div class="status-row">Image file: <strong id="latestEventImageName">...</strong></div>
+
+    <img
+        id="latestEventImage"
+        alt="Latest detected event"
+        style="display:none; width:100%; max-width:100%; height:auto; border-radius:12px; background:#000; margin-top:12px;"
+    />
+
+    <p class="muted" id="latestEventNote">No event loaded yet.</p>
+</div>
+
+  <div class="card">
     <h2>Last Response</h2>
     <pre id="output">Waiting...</pre>
   </div>
@@ -165,6 +180,53 @@
       } catch (err) {
         showResponse({ ok: false, error: String(err) });
       }
+    }
+
+    async function refreshLatestEvent() {
+        try {
+            const res = await fetch("/api/robot/events/latest");
+            const data = await res.json();
+
+            const typeEl = document.getElementById("latestEventType");
+            const timeEl = document.getElementById("latestEventTime");
+            const imageNameEl = document.getElementById("latestEventImageName");
+            const imageEl = document.getElementById("latestEventImage");
+            const noteEl = document.getElementById("latestEventNote");
+
+            if (!data.ok || !data.event) {
+            typeEl.textContent = "None";
+            timeEl.textContent = "None";
+            imageNameEl.textContent = "None";
+            imageEl.style.display = "none";
+            imageEl.removeAttribute("src");
+            noteEl.textContent = "No saved event yet.";
+            return;
+            }
+
+            const event = data.event;
+
+            typeEl.textContent = event.type || "Unknown";
+            timeEl.textContent = event.timestamp || "Unknown";
+            imageNameEl.textContent = event.image_filename || "Unknown";
+
+            if (event.image_filename) {
+            imageEl.src = `/api/robot/events/image/${encodeURIComponent(event.image_filename)}`;
+            imageEl.style.display = "block";
+            noteEl.textContent = "Latest saved event from the robot.";
+            } else {
+            imageEl.style.display = "none";
+            imageEl.removeAttribute("src");
+            noteEl.textContent = "Event exists, but no image filename was provided.";
+            }
+        } catch (err) {
+            document.getElementById("latestEventType").textContent = "Unavailable";
+            document.getElementById("latestEventTime").textContent = "Unavailable";
+            document.getElementById("latestEventImageName").textContent = "Unavailable";
+            document.getElementById("latestEventImage").style.display = "none";
+            document.getElementById("latestEventImage").removeAttribute("src");
+            document.getElementById("latestEventNote").textContent =
+            `Failed loading latest event: ${String(err)}`;
+        }
     }
 
     async function refreshStatus() {
@@ -207,7 +269,12 @@
     }
 
     refreshStatus();
-    setInterval(refreshStatus, 5000);
+    refreshLatestEvent();
+
+    setInterval(() => {
+    refreshStatus();
+    refreshLatestEvent();
+    }, 5000);
   </script>
 </body>
 </html>
