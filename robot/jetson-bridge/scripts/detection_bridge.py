@@ -157,9 +157,14 @@ def status():
 
 @app.route("/latest_event", methods=["GET"])
 def get_latest_event():
-    if latest_event is None:
-        return jsonify({"ok": True, "event": None})
-    return jsonify({"ok": True, "event": latest_event})
+    if latest_event is not None:
+        return jsonify({"ok": True, "event": latest_event})
+
+    events = list_events()
+    if events:
+        return jsonify({"ok": True, "event": events[0]})
+
+    return jsonify({"ok": True, "event": None})
 
 
 @app.route("/events", methods=["GET"])
