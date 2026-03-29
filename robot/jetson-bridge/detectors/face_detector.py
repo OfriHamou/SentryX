@@ -10,9 +10,9 @@ class FaceDetector:
 
         if cascade_path is None:
             candidate_paths = [
-                 "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
-                "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
-                "haarcascade_frontalface_default.xml",
+                "/usr/share/opencv4/haarcascades/haarcascade_profileface.xml",
+                "/usr/share/opencv/haarcascades/haarcascade_profileface.xml",
+                "haarcascade_profileface.xml",
             ]
 
             for path in candidate_paths:
@@ -22,7 +22,7 @@ class FaceDetector:
 
         if cascade_path is None:
             raise RuntimeError(
-                "Could not find haarcascade_frontalface_default.xml. "
+                "Could not find haarcascade_profileface.xml. "
                 "Please locate it on the robot and set cascade_path explicitly."
             )
 
@@ -42,7 +42,12 @@ class FaceDetector:
         resized = cv2.resize(frame, (self.detect_width, self.detect_height))
         gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
 
-        faces = self.face_cascade.detectMultiScale(gray)
+        faces = self.face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(40, 40)
+        )
 
         detections = []
 
