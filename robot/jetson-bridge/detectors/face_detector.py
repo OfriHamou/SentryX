@@ -10,9 +10,9 @@ class FaceDetector:
 
         if cascade_path is None:
             candidate_paths = [
-                "/usr/share/opencv4/haarcascades/haarcascade_profileface.xml",
-                "/usr/share/opencv/haarcascades/haarcascade_profileface.xml",
-                "haarcascade_profileface.xml",
+                 "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+                "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
+                "haarcascade_frontalface_default.xml",
             ]
 
             for path in candidate_paths:
@@ -22,7 +22,7 @@ class FaceDetector:
 
         if cascade_path is None:
             raise RuntimeError(
-                "Could not find haarcascade_profileface.xml. "
+                "Could not find haarcascade_frontalface_default.xml. "
                 "Please locate it on the robot and set cascade_path explicitly."
             )
 
