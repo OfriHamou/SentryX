@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify
 from flask import Flask, jsonify, send_from_directory
 import cv2
 import os
@@ -7,14 +6,12 @@ import json
 import time
 from datetime import datetime, timezone
 import threading
-import sys
 
-sys.path.append("/home/jetson/projects/SentryX/robot/jetson-bridge/detectors")
-from face_detector import FaceDetector
+from jetson_bridge.detectors.face_detector import FaceDetector
 
 app = Flask(__name__)
 
-EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson-bridge/data/events"
+EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
 
 os.makedirs(EVENTS_DIR, exist_ok=True)
@@ -56,29 +53,35 @@ def save_event(frame, detections):
     ts = datetime.now(timezone.utc)
     event_id = ts.strftime("%Y-%m-%dT%H-%M-%SZ")
 
+    # Check if we have at least 1 known face in the frame
+    any_known = any(det["is_known"] for det in detections)
+    event_type = "face_recognized" if any_known else "face_detected_unknown"
+
     image_filename = f"{event_id}.jpg"
     json_filename = f"{event_id}.json"
-
     image_path = os.path.join(EVENTS_DIR, image_filename)
     json_path = os.path.join(EVENTS_DIR, json_filename)
 
     annotated = frame.copy()
     for det in detections:
-        x = det["x"]
-        y = det["y"]
-        w = det["w"]
-        h = det["h"]
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        x, y, w, h = det["x"], det["y"], det["w"], det["h"]
+        # Green for known, red for unknown
+        color = (0, 255, 0) if det["is_known"] else (0, 0, 255)
+
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+        label = f"{det['name']} ({det['confidence']}%)" if det["is_known"] else "Unknown Person"
+        cv2.putText(annotated, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
     cv2.imwrite(image_path, annotated)
 
     event = {
         "id": event_id,
-        "type": "face_detected",
+        "type": event_type,
+        "is_alert": not any_known,  # We would like to make this as alert if it is not a known face
         "timestamp": ts.isoformat(),
         "image_filename": image_filename,
         "detections": detections,
-        "source": "yahboom_haar_face_detector"
+        "source": "SentryX_Smart_Vision"
     }
 
     with open(json_path, "w", encoding="utf-8") as f:
@@ -87,7 +90,6 @@ def save_event(frame, detections):
     last_event_ts = now
     latest_event = event
     return event
-
 
 def list_events():
     events = []
