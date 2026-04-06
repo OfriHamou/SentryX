@@ -10,8 +10,9 @@ JPEG_QUALITY = 70
 OUTPUT_WIDTH = 1280
 OUTPUT_HEIGHT = 720
 
-camera = None
-camera_lock = threading.Lock()
+current_frame = None
+frame_condition = threading.Condition()
+camera_opened_status = False
 
 
 def build_pipeline():
@@ -26,52 +27,52 @@ def build_pipeline():
     )
 
 
-def open_camera():
+def camera_worker():
+    global current_frame, camera_opened_status
     cap = cv2.VideoCapture(build_pipeline(), cv2.CAP_GSTREAMER)
     time.sleep(2)
-    return cap
 
-
-def get_camera():
-    global camera
-    with camera_lock:
-        if camera is None or not camera.isOpened():
-            camera = open_camera()
-        return camera
-
-
-def generate_frames():
     while True:
-        cap = get_camera()
-
         ok, frame = cap.read()
         if not ok or frame is None:
+            camera_opened_status = False
             time.sleep(0.1)
             continue
 
+        camera_opened_status = True
         ok, buffer = cv2.imencode(
             ".jpg",
             frame,
             [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
         )
 
-        if not ok:
-            continue
+        if ok:
+            with frame_condition:
+                current_frame = buffer.tobytes()
+                frame_condition.notify_all()
 
-        jpg_bytes = buffer.tobytes()
+# Start the background capture thread
+threading.Thread(target=camera_worker, daemon=True).start()
 
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
-        )
+
+def generate_frames():
+    while True:
+        with frame_condition:
+            frame_condition.wait()
+            jpg_bytes = current_frame
+
+        if jpg_bytes:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
+            )
 
 
 @app.route("/health", methods=["GET"])
 def health():
-    cap = get_camera()
     return jsonify({
         "ok": True,
-        "camera_opened": bool(cap is not None and cap.isOpened()),
+        "camera_opened": camera_opened_status,
         "source": "nvarguscamerasrc"
     })
 
