@@ -31,17 +31,6 @@ last_event_ts = 0
 state_lock = threading.Lock()
 
 
-def build_pipeline():
-    return (
-        "nvarguscamerasrc ! "
-        "video/x-raw(memory:NVMM), width=1280, height=720, framerate=30/1, format=NV12 ! "
-        "nvvidconv ! "
-        "video/x-raw, format=BGRx ! "
-        "videoconvert ! "
-        "video/x-raw, format=BGR ! "
-        "appsink max-buffers=1 drop=true sync=false"
-    )
-
 
 def save_event(frame, detections):
     global latest_event, last_event_ts
@@ -109,7 +98,8 @@ def list_events():
 def detection_loop():
     global latest_event
 
-    cap = cv2.VideoCapture(build_pipeline(), cv2.CAP_GSTREAMER)
+    # Use the MJPEG stream from the video bridge instead of accessing the camera directly
+    cap = cv2.VideoCapture("http://127.0.0.1:5001/video_feed")
     time.sleep(2)
 
     with state_lock:
