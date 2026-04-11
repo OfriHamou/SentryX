@@ -6,7 +6,7 @@ import time
 
 app = Flask(__name__)
 
-JPEG_QUALITY = 70
+JPEG_QUALITY = 90
 
 camera = None
 camera_lock = threading.Lock()
