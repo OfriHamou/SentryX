@@ -26,25 +26,70 @@ class FaceDetector:
             print(f"Error loading face database: {e}")
 
     def detect_faces(self, frame):
-        scale = 0.5
-        small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
-        rgb_small_frame = small_frame[:, :, ::-1]
+        """
+        Debug-oriented version:
+        - tries full frame first
+        - if nothing is found, tries half-size with more upsampling
+        - returns boxes even if encoding fails
+        """
 
-        face_locations = face_recognition.face_locations(
-            rgb_small_frame,
-            number_of_times_to_upsample=1,
-            model="hog"
-        )
+        attempts = [
+            {
+                "name": "full_frame",
+                "image": frame,
+                "scale": 1.0,
+                "upsample": 1,
+            },
+            {
+                "name": "half_frame",
+                "image": cv2.resize(frame, (0, 0), fx=0.5, fy=0.5),
+                "scale": 0.5,
+                "upsample": 2,
+            },
+        ]
 
+        chosen_rgb = None
+        chosen_locations = []
+        chosen_scale = 1.0
+
+        for attempt in attempts:
+            img = attempt["image"]
+            rgb = img[:, :, ::-1]
+
+            locations = face_recognition.face_locations(
+                rgb,
+                number_of_times_to_upsample=attempt["upsample"],
+                model="hog"
+            )
+
+            print(
+                "[detect_faces]",
+                attempt["name"],
+                "scale=", attempt["scale"],
+                "upsample=", attempt["upsample"],
+                "locations=", len(locations)
+            )
+
+            if locations:
+                chosen_rgb = rgb
+                chosen_locations = locations
+                chosen_scale = attempt["scale"]
+                break
+
+        if not chosen_locations:
+            return []
+
+        inv = int(round(1.0 / chosen_scale))
         detections = []
-        inv = int(round(1 / scale))
 
-        for location in face_locations:
+        for location in chosen_locations:
             name = "Unknown"
             confidence = 0
             is_known = False
 
-            encodings = face_recognition.face_encodings(rgb_small_frame, [location])
+            encodings = face_recognition.face_encodings(chosen_rgb, [location])
+
+            print("[detect_faces] location=", location, "encodings=", len(encodings))
 
             if encodings and self.known_encodings:
                 encoding = encodings[0]
