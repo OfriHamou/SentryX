@@ -27,69 +27,47 @@ class FaceDetector:
 
     def detect_faces(self, frame):
         """
-        Debug-oriented version:
-        - tries full frame first
-        - if nothing is found, tries half-size with more upsampling
-        - returns boxes even if encoding fails
+        Test version:
+        - use OpenCV Haar cascade for face detection
+        - use face_recognition only for encoding + matching
         """
 
-        attempts = [
-            {
-                "name": "full_frame",
-                "image": frame,
-                "scale": 1.0,
-                "upsample": 1,
-            },
-            {
-                "name": "half_frame",
-                "image": cv2.resize(frame, (0, 0), fx=0.5, fy=0.5),
-                "scale": 0.5,
-                "upsample": 2,
-            },
-        ]
-
-        chosen_rgb = None
-        chosen_locations = []
-        chosen_scale = 1.0
-
-        for attempt in attempts:
-            img = attempt["image"]
-            rgb = img[:, :, ::-1]
-
-            locations = face_recognition.face_locations(
-                rgb,
-                number_of_times_to_upsample=attempt["upsample"],
-                model="hog"
+        if not hasattr(self, "_haar_face"):
+            self._haar_face = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
 
-            print(
-                "[detect_faces]",
-                attempt["name"],
-                "scale=", attempt["scale"],
-                "upsample=", attempt["upsample"],
-                "locations=", len(locations)
-            )
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.equalizeHist(gray)
 
-            if locations:
-                chosen_rgb = rgb
-                chosen_locations = locations
-                chosen_scale = attempt["scale"]
-                break
+        faces = self._haar_face.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(80, 80)
+        )
 
-        if not chosen_locations:
-            return []
+        print("[detect_faces] haar faces =", len(faces))
 
-        inv = int(round(1.0 / chosen_scale))
+        rgb_frame = frame[:, :, ::-1]
         detections = []
 
-        for location in chosen_locations:
+        for (x, y, w, h) in faces:
+            pad = int(0.15 * max(w, h))
+
+            left = max(0, x - pad)
+            top = max(0, y - pad)
+            right = min(frame.shape[1], x + w + pad)
+            bottom = min(frame.shape[0], y + h + pad)
+
+            location = (top, right, bottom, left)
+
             name = "Unknown"
             confidence = 0
             is_known = False
 
-            encodings = face_recognition.face_encodings(chosen_rgb, [location])
-
-            print("[detect_faces] location=", location, "encodings=", len(encodings))
+            encodings = face_recognition.face_encodings(rgb_frame, [location])
+            print("[detect_faces] location =", location, "encodings =", len(encodings))
 
             if encodings and self.known_encodings:
                 encoding = encodings[0]
@@ -101,12 +79,11 @@ class FaceDetector:
                     confidence = round((1 - distances[best_match_index]) * 100, 2)
                     is_known = True
 
-            top, right, bottom, left = location
             detections.append({
-                "x": left * inv,
-                "y": top * inv,
-                "w": (right - left) * inv,
-                "h": (bottom - top) * inv,
+                "x": left,
+                "y": top,
+                "w": right - left,
+                "h": bottom - top,
                 "name": name,
                 "confidence": confidence,
                 "is_known": is_known
