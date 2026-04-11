@@ -7,15 +7,15 @@ const PORT = process.env.PORT || 3001;
 
 // Jetson control bridge
 const JETSON_BASE_URL =
-  process.env.JETSON_BASE_URL || "http://192.168.7.132:5000";
+  process.env.JETSON_BASE_URL || "http://192.168.1.247:5000";
 
 // Jetson video bridge
 const JETSON_VIDEO_URL =
-  process.env.JETSON_VIDEO_URL || "http://192.168.7.132:5001";
+  process.env.JETSON_VIDEO_URL || "http://192.168.1.247:5001";
 
 // Jetson detection bridge
 const JETSON_DETECTION_URL =
-  process.env.JETSON_DETECTION_URL || "http://192.168.7.132:5002";
+  process.env.JETSON_DETECTION_URL || "http://192.168.1.247:5002";
 
 app.use(cors());
 app.use(express.json());
