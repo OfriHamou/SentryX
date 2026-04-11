@@ -30,7 +30,6 @@ class FaceDetector:
     def detect_faces(self, frame):
         small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
 
-        # Convert BGR -> RGB and force contiguous memory for dlib
         rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
         rgb_small_frame = np.ascontiguousarray(rgb_small_frame)
 
