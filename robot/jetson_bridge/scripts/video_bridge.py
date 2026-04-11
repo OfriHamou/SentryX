@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
-from flask import Flask, Response, jsonify
 import cv2
 import threading
 import time
+import asyncio
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+import uvicorn
 
-app = Flask(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start the background capture thread
+    threading.Thread(target=camera_worker, daemon=True).start()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 JPEG_QUALITY = 70
 OUTPUT_WIDTH = 1280
 OUTPUT_HEIGHT = 720
 
-camera = None
-camera_lock = threading.Lock()
+current_frame = None
+current_frame_id = 0
+camera_opened_status = False
 
 
 def build_pipeline():
@@ -26,63 +38,64 @@ def build_pipeline():
     )
 
 
-def open_camera():
+def camera_worker():
+    global current_frame, current_frame_id, camera_opened_status
     cap = cv2.VideoCapture(build_pipeline(), cv2.CAP_GSTREAMER)
     time.sleep(2)
-    return cap
 
-
-def get_camera():
-    global camera
-    with camera_lock:
-        if camera is None or not camera.isOpened():
-            camera = open_camera()
-        return camera
-
-
-def generate_frames():
     while True:
-        cap = get_camera()
-
         ok, frame = cap.read()
         if not ok or frame is None:
+            camera_opened_status = False
             time.sleep(0.1)
             continue
 
+        camera_opened_status = True
         ok, buffer = cv2.imencode(
             ".jpg",
             frame,
             [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
         )
 
-        if not ok:
+        if ok:
+            current_frame = buffer.tobytes()
+            current_frame_id += 1
+
+
+async def generate_frames():
+    last_id = -1
+    while True:
+        # Check if a new frame is available by looking at the frame ID
+        if current_frame_id == last_id or current_frame is None:
+            await asyncio.sleep(0.01)  # Yield to event loop, 10ms poll
             continue
 
-        jpg_bytes = buffer.tobytes()
+        last_id = current_frame_id
+        jpg_bytes = current_frame
 
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
-        )
+        if jpg_bytes is not None:
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
+            )
 
 
-@app.route("/health", methods=["GET"])
+@app.get("/health")
 def health():
-    cap = get_camera()
-    return jsonify({
+    return {
         "ok": True,
-        "camera_opened": bool(cap is not None and cap.isOpened()),
+        "camera_opened": camera_opened_status,
         "source": "nvarguscamerasrc"
-    })
+    }
 
 
-@app.route("/video_feed", methods=["GET"])
+@app.get("/video_feed")
 def video_feed():
-    return Response(
+    return StreamingResponse(
         generate_frames(),
-        mimetype="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, threaded=True)
+    uvicorn.run(app, host="0.0.0.0", port=5001)
