@@ -3,13 +3,25 @@ import os
 import cv2
 import json
 import time
-import uuid
-import threading
-
 from datetime import datetime, timezone
+import threading
+import requests
+import numpy as np
+import uuid
+import logging
+from typing import Dict, Any
 from flask import Flask, jsonify, send_from_directory
 
 from jetson_bridge.detectors.face_detector import FaceDetector
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 app = Flask(__name__)
 
@@ -24,7 +36,7 @@ detector = FaceDetector()
 state_lock = threading.Lock()
 
 latest_event = None
-latest_status = {
+latest_status: Dict[str, Any] = {
     "ok": True,
     "camera_opened": False,
     "faces_detected": 0,
@@ -35,17 +47,20 @@ latest_status = {
 
 
 def open_stream():
+    logger.debug(f"Attempting to open cv2.VideoCapture at {STREAM_URL}")
     cap = cv2.VideoCapture(STREAM_URL)
     time.sleep(1.0)
     return cap
 
 
 def save_event(frame, detections):
+    logger.debug(f"Saving event for {len(detections)} detection(s).")
     annotated = frame.copy()
 
     any_known = any(d.get("is_known", False) for d in detections)
     event_type = "face_recognized" if any_known else "face_detected_unknown"
     is_alert = not any_known
+    logger.info(f"Event type determined as: {event_type} (Alert: {is_alert})")
 
     for det in detections:
         x = int(det["x"])
@@ -81,6 +96,7 @@ def save_event(frame, detections):
     json_path = os.path.join(EVENTS_DIR, json_filename)
 
     cv2.imwrite(image_path, annotated)
+    logger.debug(f"Event image saved to {image_path}")
 
     event = {
         "id": event_id,
@@ -94,10 +110,12 @@ def save_event(frame, detections):
     with open(json_path, "w") as f:
         json.dump(event, f, indent=2)
 
+    logger.info(f"Event {event_id} successfully saved to {json_path}")
     return event
 
 
 def load_all_events():
+    logger.debug("Loading all events from disk.")
     events = []
 
     for filename in os.listdir(EVENTS_DIR):
@@ -112,63 +130,59 @@ def load_all_events():
             pass
 
     events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+    logger.debug(f"Loaded {len(events)} events.")
     return events
 
 
 def detection_loop():
     global latest_event
 
-    cap = None
-    last_saved_event_time = 0
+    logger.info("Starting detection loop worker...")
+    time.sleep(2)
 
-    while True:
-        if cap is None or not cap.isOpened():
-            cap = open_stream()
+    # Use requests to manually parse the MJPEG stream instead of cv2.VideoCapture
+    # This is much more robust on Jetson as cv2 may not have FFmpeg network support compiled
+    try:
+        logger.info(f"Connecting to MJPEG stream at {STREAM_URL}...")
+        stream = requests.get(STREAM_URL, stream=True)
+        with state_lock:
+            latest_status["camera_opened"] = stream.status_code == 200
+        logger.info(f"Stream connected with status code: {stream.status_code}")
+    except Exception as e:
+        logger.error(f"Failed to connect to stream: {e}")
+        with state_lock:
+            latest_status["camera_opened"] = False
+        return
 
-            with state_lock:
-                latest_status["camera_opened"] = bool(cap is not None and cap.isOpened())
+    logger.debug("Starting frame reading loop...")
+    bytes_data = b""
+    for chunk in stream.iter_content(chunk_size=4096):
+        bytes_data += chunk
+        a = bytes_data.find(b'\xff\xd8')
+        b = bytes_data.find(b'\xff\xd9')
+        if a != -1 and b != -1:
+            jpg = bytes_data[a:b+2]
+            bytes_data = bytes_data[b+2:]
+            frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
 
-            if cap is None or not cap.isOpened():
-                time.sleep(1.0)
+            if frame is None:
+                logger.warning("Failed to decode JPEG frame.")
                 continue
 
-        ret, frame = cap.read()
+            detections = detector.detect_faces(frame)
 
-        if not ret or frame is None:
             with state_lock:
-                latest_status["camera_opened"] = False
-                latest_status["faces_detected"] = 0
-                latest_status["detections"] = []
+                latest_status["camera_opened"] = True
+                latest_status["faces_detected"] = len(detections)
 
-            try:
-                cap.release()
-            except Exception:
-                pass
-
-            cap = None
-            time.sleep(0.2)
-            continue
-
-        detections = detector.detect_faces(frame)
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        with state_lock:
-            latest_status["camera_opened"] = True
-            latest_status["faces_detected"] = len(detections)
-            latest_status["detections"] = detections
             if detections:
-                latest_status["last_detection_time"] = now_iso
+                logger.info(f"Detected {len(detections)} face(s) in frame.")
+                event = save_event(frame, detections)
+                with state_lock:
+                    latest_status["last_detection_time"] = datetime.now(timezone.utc).isoformat()
+                    if event is not None:
+                        latest_status["last_event_id"] = event["id"]
 
-        if detections and (time.time() - last_saved_event_time >= EVENT_COOLDOWN_SECONDS):
-            event = save_event(frame, detections)
-
-            with state_lock:
-                latest_event = event
-                latest_status["last_event_id"] = event["id"]
-
-            last_saved_event_time = time.time()
-
-        time.sleep(0.05)
 
 
 @app.route("/health", methods=["GET"])
