@@ -1,8 +1,19 @@
 import face_recognition
 import sqlite3
+import logging
+
 import numpy as np
 import json
 import cv2
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
 
 class FaceDetector:
@@ -10,47 +21,80 @@ class FaceDetector:
         self.db_path = db_path
         self.known_encodings = []
         self.known_names = []
-        self.load_database()
+        logger.info(f"Initializing FaceDetector with DB path: {self.db_path}")
+        self._load_known_faces()
 
-    def load_database(self):
+    def _load_known_faces(self):
+        if not os.path.exists(self.db_path):
+            logger.error("Face DB not found at: {}".format(self.db_path))
+            return
+
+        conn = sqlite3.connect(self.db_path)
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT name, embedding FROM users")
+            rows = cursor.fetchall()
+            logger.debug(f"Fetched {len(rows)} rows from database.")
 
-            for row in cursor.fetchall():
-                self.known_names.append(row[0])
-                self.known_encodings.append(np.array(json.loads(row[1])))
+            for name, embedding_json in rows:
+                try:
+                    embedding = np.array(json.loads(embedding_json), dtype=np.float64)
+                    if embedding.shape[0] != 128:
+                        logger.warning(f"Invalid embedding shape for {name}: {embedding.shape}")
+                        continue
 
-            conn.close()
-            print("Successfully loaded {} faces from DB.".format(len(self.known_names)))
+                    self.known_names.append(name)
+                    self.known_encodings.append(embedding)
+                    logger.debug(f"Loaded valid embedding for user: {name}")
+                except Exception as e:
+                    logger.error("Failed to load embedding for {}: {}".format(name, e))
+
+            logger.info("Successfully loaded {} faces from DB.".format(len(self.known_names)))
         except Exception as e:
-            print("Error loading face database: {}".format(e))
+            logger.error("Failed to load faces DB: {}".format(e))
+        finally:
+            conn.close()
+            logger.debug("Database connection closed.")
 
     def detect_faces(self, frame):
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        if frame is None:
+            logger.warning("Received empty frame for detection.")
+            return []
 
-        rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        rgb_small_frame = np.ascontiguousarray(rgb_small_frame)
+        logger.debug("Starting face detection on new frame.")
+        rgb_frame = frame[:, :, ::-1]
 
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+        # Use CNN model for face detection to leverage the Jetson's NVIDIA GPU hardware acceleration
+        logger.debug("Running face_recognition.face_locations (Model: CNN)...")
+        face_locations = face_recognition.face_locations(rgb_frame, model="cnn")
+        logger.debug(f"Found {len(face_locations)} face(s) in frame.")
+
+        logger.debug("Extracting face encodings...")
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
 
         detections = []
 
-        for location, encoding in zip(face_locations, face_encodings):
+        for (top, right, bottom, left), encoding in zip(face_locations, face_encodings):
             name = "Unknown"
             confidence = 0
             is_known = False
 
             if self.known_encodings:
                 distances = face_recognition.face_distance(self.known_encodings, encoding)
-                best_match_index = np.argmin(distances)
+                best_match_index = int(np.argmin(distances))
+                best_distance = float(distances[best_match_index])
+                logger.debug(f"Face distance to best match ({self.known_names[best_match_index]}): {best_distance:.4f}")
 
-                if distances[best_match_index] < 0.5:
+                if best_distance < 0.5:
                     name = self.known_names[best_match_index]
-                    confidence = round((1 - distances[best_match_index]) * 100, 2)
+                    confidence = round((1 - best_distance) * 100, 2)
                     is_known = True
+                    logger.info(f"Recognized known face: {name} with confidence: {confidence}%")
+                else:
+                    logger.info(f"Face detected but unrecognized. Best match was {self.known_names[best_match_index]} (distance: {best_distance:.4f})")
+            else:
+                logger.warning("No known encodings loaded. Recognizing all faces as Unknown.")
 
             top, right, bottom, left = location
 
@@ -64,4 +108,6 @@ class FaceDetector:
                 "is_known": is_known
             })
 
+        logger.debug(f"Finished processing frame. Total detections returning: {len(detections)}")
         return detections
+
