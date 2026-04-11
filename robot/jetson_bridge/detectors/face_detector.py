@@ -1,53 +1,77 @@
-import face_recognition
-import sqlite3
-import numpy as np
+import os
 import json
+import sqlite3
+
 import cv2
+import numpy as np
+import face_recognition
 
 
 class FaceDetector:
-    def __init__(self, db_path: str = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/faces_data.db"):
+    def __init__(self, db_path="/home/jetson/projects/SentryX/robot/jetson_bridge/data/faces_data.db"):
         self.db_path = db_path
         self.known_encodings = []
         self.known_names = []
-        self.load_database()
+        self.face_cascade = self._load_face_cascade()
+        self._load_known_faces()
 
-    def load_database(self) -> None:
+    def _load_face_cascade(self):
+        cascade_candidates = [
+            "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+            "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
+            "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+        ]
+
+        for candidate in cascade_candidates:
+            if os.path.exists(candidate):
+                cascade = cv2.CascadeClassifier(candidate)
+                if not cascade.empty():
+                    print("Loaded Haar cascade from: {}".format(candidate))
+                    return cascade
+
+        raise RuntimeError("Could not load haarcascade_frontalface_default.xml")
+
+    def _load_known_faces(self):
+        if not os.path.exists(self.db_path):
+            print("Face DB not found at: {}".format(self.db_path))
+            return
+
+        conn = sqlite3.connect(self.db_path)
         try:
-            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT name, embedding FROM users")
-            for row in cursor.fetchall():
-                self.known_names.append(row[0])
-                self.known_encodings.append(np.array(json.loads(row[1])))
-            conn.close()
-            print(f"Successfully loaded {len(self.known_names)} faces from DB.")
+            rows = cursor.fetchall()
+
+            for name, embedding_json in rows:
+                try:
+                    embedding = np.array(json.loads(embedding_json), dtype=np.float64)
+                    if embedding.shape[0] != 128:
+                        continue
+
+                    self.known_names.append(name)
+                    self.known_encodings.append(embedding)
+                except Exception as e:
+                    print("Failed to load embedding for {}: {}".format(name, e))
+
+            print("Successfully loaded {} faces from DB.".format(len(self.known_names)))
         except Exception as e:
-            print(f"Error loading face database: {e}")
+            print("Failed to load faces DB: {}".format(e))
+        finally:
+            conn.close()
 
     def detect_faces(self, frame):
-        """
-        Test version:
-        - use OpenCV Haar cascade for face detection
-        - use face_recognition only for encoding + matching
-        """
-
-        if not hasattr(self, "_haar_face"):
-            self._haar_face = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-            )
+        if frame is None:
+            return []
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.equalizeHist(gray)
 
-        faces = self._haar_face.detectMultiScale(
+        faces = self.face_cascade.detectMultiScale(
             gray,
             scaleFactor=1.1,
             minNeighbors=5,
-            minSize=(80, 80)
+            minSize=(60, 60)
         )
-
-        print("[detect_faces] haar faces =", len(faces))
 
         rgb_frame = frame[:, :, ::-1]
         detections = []
@@ -67,7 +91,6 @@ class FaceDetector:
             is_known = False
 
             encodings = face_recognition.face_encodings(rgb_frame, [location])
-            print("[detect_faces] location =", location, "encodings =", len(encodings))
 
             if encodings and self.known_encodings:
                 encoding = encodings[0]
@@ -80,10 +103,10 @@ class FaceDetector:
                     is_known = True
 
             detections.append({
-                "x": left,
-                "y": top,
-                "w": right - left,
-                "h": bottom - top,
+                "x": int(left),
+                "y": int(top),
+                "w": int(right - left),
+                "h": int(bottom - top),
                 "name": name,
                 "confidence": confidence,
                 "is_known": is_known
