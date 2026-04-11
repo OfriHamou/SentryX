@@ -7,11 +7,15 @@ import time
 app = Flask(__name__)
 
 JPEG_QUALITY = 70
-OUTPUT_WIDTH = 1280
-OUTPUT_HEIGHT = 720
 
 camera = None
 camera_lock = threading.Lock()
+
+latest_jpeg = None
+latest_frame_time = None
+frame_cond = threading.Condition()
+
+capture_thread = None
 
 
 def build_pipeline():
@@ -40,13 +44,15 @@ def get_camera():
         return camera
 
 
-def generate_frames():
+def capture_loop():
+    global latest_jpeg, latest_frame_time
+
     while True:
         cap = get_camera()
-
         ok, frame = cap.read()
+
         if not ok or frame is None:
-            time.sleep(0.1)
+            time.sleep(0.05)
             continue
 
         ok, buffer = cv2.imencode(
@@ -54,35 +60,71 @@ def generate_frames():
             frame,
             [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY]
         )
-
         if not ok:
             continue
 
         jpg_bytes = buffer.tobytes()
 
+        with frame_cond:
+            latest_jpeg = jpg_bytes
+            latest_frame_time = time.time()
+            frame_cond.notify_all()
+
+
+def ensure_capture_thread():
+    global capture_thread
+    with camera_lock:
+        if capture_thread is None or not capture_thread.is_alive():
+            capture_thread = threading.Thread(target=capture_loop, daemon=True)
+            capture_thread.start()
+
+
+def generate_frames():
+    ensure_capture_thread()
+
+    while True:
+        with frame_cond:
+            if latest_jpeg is None:
+                frame_cond.wait(timeout=1.0)
+                continue
+            jpg_bytes = latest_jpeg
+
         yield (
             b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n"
+            b"Content-Type: image/jpeg\r\n"
+            b"Cache-Control: no-cache\r\n\r\n" +
+            jpg_bytes +
+            b"\r\n"
         )
 
 
 @app.route("/health", methods=["GET"])
 def health():
+    ensure_capture_thread()
     cap = get_camera()
     return jsonify({
         "ok": True,
         "camera_opened": bool(cap is not None and cap.isOpened()),
-        "source": "nvarguscamerasrc"
+        "source": "nvarguscamerasrc",
+        "has_frame": latest_jpeg is not None,
+        "last_frame_time": latest_frame_time,
     })
 
 
 @app.route("/video_feed", methods=["GET"])
 def video_feed():
-    return Response(
+    ensure_capture_thread()
+    response = Response(
         generate_frames(),
         mimetype="multipart/x-mixed-replace; boundary=frame"
     )
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Connection"] = "keep-alive"
+    return response
 
 
 if __name__ == "__main__":
+    ensure_capture_thread()
     app.run(host="0.0.0.0", port=5001, threaded=True)
