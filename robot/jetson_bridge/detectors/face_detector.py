@@ -1,10 +1,10 @@
-import os
-import json
+import face_recognition
 import sqlite3
 import logging
 
 import numpy as np
-import face_recognition
+import json
+import cv2
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -31,6 +31,7 @@ class FaceDetector:
 
         conn = sqlite3.connect(self.db_path)
         try:
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT name, embedding FROM users")
             rows = cursor.fetchall()
@@ -95,11 +96,13 @@ class FaceDetector:
             else:
                 logger.warning("No known encodings loaded. Recognizing all faces as Unknown.")
 
+            top, right, bottom, left = location
+
             detections.append({
-                "x": int(left),
-                "y": int(top),
-                "w": int(right - left),
-                "h": int(bottom - top),
+                "x": left * 4,
+                "y": top * 4,
+                "w": (right - left) * 4,
+                "h": (bottom - top) * 4,
                 "name": name,
                 "confidence": confidence,
                 "is_known": is_known

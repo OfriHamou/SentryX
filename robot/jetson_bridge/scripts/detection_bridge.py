@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import os
+from flask import Flask, jsonify, send_from_directory
 import cv2
+import os
 import json
 import time
 from datetime import datetime, timezone
@@ -25,9 +26,9 @@ if not logger.handlers:
 
 app = Flask(__name__)
 
-STREAM_URL = "http://127.0.0.1:5001/video_feed"
 EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
-EVENT_COOLDOWN_SECONDS = 5
+COOLDOWN_SECONDS = 10
+STREAM_URL = "http://127.0.0.1:5001/video_feed"
 
 os.makedirs(EVENTS_DIR, exist_ok=True)
 
@@ -40,7 +41,6 @@ latest_status: Dict[str, Any] = {
     "ok": True,
     "camera_opened": False,
     "faces_detected": 0,
-    "detections": [],
     "last_event_id": None,
     "last_detection_time": None,
 }
@@ -57,57 +57,58 @@ def save_event(frame, detections):
     logger.debug(f"Saving event for {len(detections)} detection(s).")
     annotated = frame.copy()
 
-    any_known = any(d.get("is_known", False) for d in detections)
+    now = time.time()
+    if now - last_event_ts < COOLDOWN_SECONDS:
+        return None
+
+    ts = datetime.now(timezone.utc)
+    event_id = ts.strftime("%Y-%m-%dT%H-%M-%SZ")
+
+    any_known = any(det["is_known"] for det in detections)
     event_type = "face_recognized" if any_known else "face_detected_unknown"
     is_alert = not any_known
     logger.info(f"Event type determined as: {event_type} (Alert: {is_alert})")
 
+    image_filename = "{}.jpg".format(event_id)
+    json_filename = "{}.json".format(event_id)
+
+    image_path = os.path.join(EVENTS_DIR, image_filename)
+    json_path = os.path.join(EVENTS_DIR, json_filename)
+
+    annotated = frame.copy()
+
     for det in detections:
-        x = int(det["x"])
-        y = int(det["y"])
-        w = int(det["w"])
-        h = int(det["h"])
+        x, y, w, h = det["x"], det["y"], det["w"], det["h"]
 
-        color = (0, 255, 0) if det.get("is_known") else (0, 0, 255)
-
-        label = det.get("name", "Unknown")
-        if det.get("is_known"):
-            label = "{} ({}%)".format(label, det.get("confidence", 0))
-
+        color = (0, 255, 0) if det["is_known"] else (0, 0, 255)
         cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+
+        label = "{} ({}%)".format(det["name"], det["confidence"]) if det["is_known"] else "Unknown Person"
+
         cv2.putText(
             annotated,
             label,
-            (x, max(20, y - 10)),
+            (x, y - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             color,
             2
         )
 
-    event_id = uuid.uuid4().hex[:12]
-    timestamp = datetime.now(timezone.utc).isoformat()
-    base_name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ") + "_" + event_id
-
-    image_filename = base_name + ".jpg"
-    json_filename = base_name + ".json"
-
-    image_path = os.path.join(EVENTS_DIR, image_filename)
-    json_path = os.path.join(EVENTS_DIR, json_filename)
-
     cv2.imwrite(image_path, annotated)
     logger.debug(f"Event image saved to {image_path}")
 
     event = {
         "id": event_id,
-        "timestamp": timestamp,
         "type": event_type,
-        "is_alert": is_alert,
+        "is_alert": not any_known,
+        "timestamp": ts.isoformat(),
         "image_filename": image_filename,
-        "detections": detections
+        "detections": detections,
+        "source": "SentryX_Smart_Vision"
     }
 
-    with open(json_path, "w") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(event, f, indent=2)
 
     logger.info(f"Event {event_id} successfully saved to {json_path}")
@@ -118,16 +119,17 @@ def load_all_events():
     logger.debug("Loading all events from disk.")
     events = []
 
-    for filename in os.listdir(EVENTS_DIR):
-        if not filename.endswith(".json"):
+    for name in sorted(os.listdir(EVENTS_DIR), reverse=True):
+        if not name.endswith(".json"):
             continue
 
-        path = os.path.join(EVENTS_DIR, filename)
+        path = os.path.join(EVENTS_DIR, name)
+
         try:
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 events.append(json.load(f))
         except Exception:
-            pass
+            continue
 
     events.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
     logger.debug(f"Loaded {len(events)} events.")
@@ -199,33 +201,32 @@ def health():
 @app.route("/status", methods=["GET"])
 def status():
     with state_lock:
-        return jsonify(dict(latest_status))
+        return jsonify(latest_status)
 
 
 @app.route("/latest_event", methods=["GET"])
-def latest_event_route():
-    with state_lock:
-        return jsonify({
-            "ok": True,
-            "event": latest_event
-        })
+def get_latest_event():
+    if latest_event is not None:
+        return jsonify({"ok": True, "event": latest_event})
+
+    events = list_events()
+    if events:
+        return jsonify({"ok": True, "event": events[0]})
+
+    return jsonify({"ok": True, "event": None})
 
 
 @app.route("/events", methods=["GET"])
-def events_route():
-    return jsonify({
-        "ok": True,
-        "events": load_all_events()
-    })
+def get_events():
+    return jsonify({"ok": True, "events": list_events()})
 
 
 @app.route("/image/<filename>", methods=["GET"])
-def image_route(filename):
+def get_image(filename):
     return send_from_directory(EVENTS_DIR, filename)
 
 
 if __name__ == "__main__":
-    thread = threading.Thread(target=detection_loop, daemon=True)
-    thread.start()
-
+    worker = threading.Thread(target=detection_loop, daemon=True)
+    worker.start()
     app.run(host="0.0.0.0", port=5002, threaded=True)
