@@ -26,22 +26,31 @@ class FaceDetector:
             print(f"Error loading face database: {e}")
 
     def detect_faces(self, frame):
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-        # cv2 works with GBR coloring, we will convert to standard RGB
+        scale = 0.5
+        small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
         rgb_small_frame = small_frame[:, :, ::-1]
 
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+        face_locations = face_recognition.face_locations(
+            rgb_small_frame,
+            number_of_times_to_upsample=1,
+            model="hog"
+        )
 
         detections = []
-        for location, encoding in zip(face_locations, face_encodings):
+        inv = int(round(1 / scale))
+
+        for location in face_locations:
             name = "Unknown"
             confidence = 0
             is_known = False
 
-            if self.known_encodings:
+            encodings = face_recognition.face_encodings(rgb_small_frame, [location])
+
+            if encodings and self.known_encodings:
+                encoding = encodings[0]
                 distances = face_recognition.face_distance(self.known_encodings, encoding)
                 best_match_index = np.argmin(distances)
+
                 if distances[best_match_index] < 0.5:
                     name = self.known_names[best_match_index]
                     confidence = round((1 - distances[best_match_index]) * 100, 2)
@@ -49,10 +58,13 @@ class FaceDetector:
 
             top, right, bottom, left = location
             detections.append({
-                "x": left * 4, "y": top * 4,
-                "w": (right - left) * 4, "h": (bottom - top) * 4,
+                "x": left * inv,
+                "y": top * inv,
+                "w": (right - left) * inv,
+                "h": (bottom - top) * inv,
                 "name": name,
                 "confidence": confidence,
                 "is_known": is_known
             })
+
         return detections
