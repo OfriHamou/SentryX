@@ -7,7 +7,7 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 900px;
+      max-width: 1000px;
       margin: 40px auto;
       padding: 0 20px;
       background: #f7f7f7;
@@ -29,6 +29,11 @@
     .status-row {
       margin: 8px 0;
       font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .status-row strong {
+      word-break: break-word;
     }
 
     .controls {
@@ -74,6 +79,8 @@
       border-radius: 10px;
       overflow-x: auto;
       font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     #videoFeed {
@@ -84,11 +91,46 @@
       border-radius: 12px;
       background: #000;
     }
+
+    #latestEventImage {
+      display: none;
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+      background: #000;
+      margin-top: 12px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: bold;
+      background: #eee;
+      color: #222;
+    }
+
+    .pill.ok {
+      background: #d7f5dc;
+      color: #176b2c;
+    }
+
+    .pill.bad {
+      background: #ffe0e0;
+      color: #9c1c1c;
+    }
+
+    .pill.warn {
+      background: #fff2cc;
+      color: #8a6400;
+    }
   </style>
 </head>
 <body>
   <h1>SentryX Test Control</h1>
-  <p class="muted">Temporary browser test page for Milestone 3</p>
+  <p class="muted">Temporary browser test page with live robot, event, and face-recognition debug.</p>
 
   <div class="card">
     <h2>Robot Status</h2>
@@ -129,19 +171,43 @@
   </div>
 
   <div class="card">
+    <h2>Live Detection Debug</h2>
+    <div class="status-row">Detection health: <strong id="detectionHealth">...</strong></div>
+    <div class="status-row">Detection camera opened: <strong id="detectionCameraOpened">...</strong></div>
+    <div class="status-row">Faces detected now: <strong id="facesDetectedNow">...</strong></div>
+    <div class="status-row">Last detection time: <strong id="lastDetectionTime">...</strong></div>
+    <div class="status-row">Last event id: <strong id="lastEventIdDebug">...</strong></div>
+
+    <div class="status-row">
+      Detection summary:
+      <strong id="detectionSummary">
+        <span class="pill">Waiting...</span>
+      </strong>
+    </div>
+
+    <p class="muted">
+      This section helps debug whether the robot detects a face at all, and if so,
+      whether it recognizes the person as known or unknown.
+    </p>
+
+    <pre id="detectionsJson">[]</pre>
+
+    <button class="wide" onclick="refreshDetectionDebug()">Refresh detection debug</button>
+  </div>
+
+  <div class="card">
     <h2>Latest Event</h2>
     <div class="status-row">Event type: <strong id="latestEventType">...</strong></div>
     <div class="status-row">Timestamp: <strong id="latestEventTime">...</strong></div>
     <div class="status-row">Image file: <strong id="latestEventImageName">...</strong></div>
 
     <img
-        id="latestEventImage"
-        alt="Latest detected event"
-        style="display:none; width:100%; max-width:100%; height:auto; border-radius:12px; background:#000; margin-top:12px;"
+      id="latestEventImage"
+      alt="Latest detected event"
     />
 
     <p class="muted" id="latestEventNote">No event loaded yet.</p>
-</div>
+  </div>
 
   <div class="card">
     <h2>Last Response</h2>
@@ -152,6 +218,43 @@
     function showResponse(data) {
       document.getElementById("output").textContent =
         JSON.stringify(data, null, 2);
+    }
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function boolText(value) {
+      return value ? "Yes" : "No";
+    }
+
+    function connectionText(value) {
+      return value ? "Connected" : "Disconnected";
+    }
+
+    function renderDetectionSummary(detections) {
+      const summaryEl = document.getElementById("detectionSummary");
+
+      if (!Array.isArray(detections) || detections.length === 0) {
+        summaryEl.innerHTML = '<span class="pill warn">No faces detected</span>';
+        return;
+      }
+
+      const pills = detections.map((detection) => {
+        const name = detection.name || "Unknown";
+        const confidence =
+          typeof detection.confidence === "number"
+            ? ` (${detection.confidence}%)`
+            : "";
+        const cls = detection.is_known ? "ok" : "bad";
+        const label = detection.is_known
+          ? `${name}${confidence}`
+          : `${name}${confidence} - unknown`;
+
+        return `<span class="pill ${cls}" style="margin-right:8px; margin-bottom:8px;">${label}</span>`;
+      });
+
+      summaryEl.innerHTML = pills.join("");
     }
 
     async function sendMove(speed, rotation) {
@@ -183,50 +286,50 @@
     }
 
     async function refreshLatestEvent() {
-        try {
-            const res = await fetch("/api/robot/events/latest");
-            const data = await res.json();
+      try {
+        const res = await fetch("/api/robot/events/latest");
+        const data = await res.json();
 
-            const typeEl = document.getElementById("latestEventType");
-            const timeEl = document.getElementById("latestEventTime");
-            const imageNameEl = document.getElementById("latestEventImageName");
-            const imageEl = document.getElementById("latestEventImage");
-            const noteEl = document.getElementById("latestEventNote");
+        const typeEl = document.getElementById("latestEventType");
+        const timeEl = document.getElementById("latestEventTime");
+        const imageNameEl = document.getElementById("latestEventImageName");
+        const imageEl = document.getElementById("latestEventImage");
+        const noteEl = document.getElementById("latestEventNote");
 
-            if (!data.ok || !data.event) {
-            typeEl.textContent = "None";
-            timeEl.textContent = "None";
-            imageNameEl.textContent = "None";
-            imageEl.style.display = "none";
-            imageEl.removeAttribute("src");
-            noteEl.textContent = "No saved event yet.";
-            return;
-            }
-
-            const event = data.event;
-
-            typeEl.textContent = event.type || "Unknown";
-            timeEl.textContent = event.timestamp || "Unknown";
-            imageNameEl.textContent = event.image_filename || "Unknown";
-
-            if (event.image_filename) {
-            imageEl.src = `/api/robot/events/image/${encodeURIComponent(event.image_filename)}`;
-            imageEl.style.display = "block";
-            noteEl.textContent = "Latest saved event from the robot.";
-            } else {
-            imageEl.style.display = "none";
-            imageEl.removeAttribute("src");
-            noteEl.textContent = "Event exists, but no image filename was provided.";
-            }
-        } catch (err) {
-            document.getElementById("latestEventType").textContent = "Unavailable";
-            document.getElementById("latestEventTime").textContent = "Unavailable";
-            document.getElementById("latestEventImageName").textContent = "Unavailable";
-            document.getElementById("latestEventImage").style.display = "none";
-            document.getElementById("latestEventImage").removeAttribute("src");
-            document.getElementById("latestEventNote").textContent =
-            `Failed loading latest event: ${String(err)}`;
+        if (!data.ok || !data.event) {
+          typeEl.textContent = "None";
+          timeEl.textContent = "None";
+          imageNameEl.textContent = "None";
+          imageEl.style.display = "none";
+          imageEl.removeAttribute("src");
+          noteEl.textContent = "No saved event yet.";
+          return;
         }
+
+        const event = data.event;
+
+        typeEl.textContent = event.type || "Unknown";
+        timeEl.textContent = event.timestamp || "Unknown";
+        imageNameEl.textContent = event.image_filename || "Unknown";
+
+        if (event.image_filename) {
+          imageEl.src = `/api/robot/events/image/${encodeURIComponent(event.image_filename)}`;
+          imageEl.style.display = "block";
+          noteEl.textContent = "Latest saved event from the robot.";
+        } else {
+          imageEl.style.display = "none";
+          imageEl.removeAttribute("src");
+          noteEl.textContent = "Event exists, but no image filename was provided.";
+        }
+      } catch (err) {
+        document.getElementById("latestEventType").textContent = "Unavailable";
+        document.getElementById("latestEventTime").textContent = "Unavailable";
+        document.getElementById("latestEventImageName").textContent = "Unavailable";
+        document.getElementById("latestEventImage").style.display = "none";
+        document.getElementById("latestEventImage").removeAttribute("src");
+        document.getElementById("latestEventNote").textContent =
+          `Failed loading latest event: ${String(err)}`;
+      }
     }
 
     async function refreshStatus() {
@@ -241,40 +344,71 @@
         const health = await healthRes.json();
         const battery = await batteryRes.json();
 
-        document.getElementById("backendHealth").textContent =
-          backend.ok ? "Connected" : "Disconnected";
-
-        document.getElementById("bridgeHealth").textContent =
-          health.ok ? "Connected" : "Disconnected";
-
-        document.getElementById("batteryReceived").textContent =
-          health.battery_data_received ? "Yes" : "No";
-
-        document.getElementById("batteryVoltage").textContent =
-          battery.ok ? `${battery.voltage} V` : "Unavailable";
-
-        document.getElementById("batteryStatus").textContent =
-          battery.ok ? battery.status : (battery.error || "Unavailable");
+        setText("backendHealth", connectionText(backend.ok));
+        setText("bridgeHealth", connectionText(health.ok));
+        setText("batteryReceived", boolText(health.battery_data_received));
+        setText("batteryVoltage", battery.ok ? `${battery.voltage} V` : "Unavailable");
+        setText("batteryStatus", battery.ok ? battery.status : (battery.error || "Unavailable"));
 
         showResponse({ backend, health, battery });
       } catch (err) {
-        document.getElementById("backendHealth").textContent = "Disconnected";
-        document.getElementById("bridgeHealth").textContent = "Disconnected";
-        document.getElementById("batteryReceived").textContent = "Unknown";
-        document.getElementById("batteryVoltage").textContent = "Unavailable";
-        document.getElementById("batteryStatus").textContent = "Unavailable";
+        setText("backendHealth", "Disconnected");
+        setText("bridgeHealth", "Disconnected");
+        setText("batteryReceived", "Unknown");
+        setText("batteryVoltage", "Unavailable");
+        setText("batteryStatus", "Unavailable");
 
         showResponse({ ok: false, error: String(err) });
       }
     }
 
-    refreshStatus();
-    refreshLatestEvent();
+    async function refreshDetectionDebug() {
+      try {
+        const [healthRes, statusRes] = await Promise.all([
+          fetch("/api/robot/detection/health"),
+          fetch("/api/robot/detection/status")
+        ]);
+
+        const health = await healthRes.json();
+        const status = await statusRes.json();
+
+        setText("detectionHealth", health.ok ? "Connected" : "Disconnected");
+        setText("detectionCameraOpened", boolText(health.camera_opened));
+        setText("facesDetectedNow", status.faces_detected ?? 0);
+        setText("lastDetectionTime", status.last_detection_time ?? "None");
+        setText("lastEventIdDebug", status.last_event_id ?? "None");
+
+        const detections = Array.isArray(status.detections) ? status.detections : [];
+        document.getElementById("detectionsJson").textContent =
+          JSON.stringify(detections, null, 2);
+
+        renderDetectionSummary(detections);
+      } catch (err) {
+        setText("detectionHealth", "Unavailable");
+        setText("detectionCameraOpened", "Unavailable");
+        setText("facesDetectedNow", "Unavailable");
+        setText("lastDetectionTime", "Unavailable");
+        setText("lastEventIdDebug", "Unavailable");
+        document.getElementById("detectionsJson").textContent =
+          `Failed to load detection debug: ${String(err)}`;
+        document.getElementById("detectionSummary").innerHTML =
+          '<span class="pill bad">Detection debug failed</span>';
+      }
+    }
+
+    async function refreshAll() {
+      await Promise.all([
+        refreshStatus(),
+        refreshLatestEvent(),
+        refreshDetectionDebug()
+      ]);
+    }
+
+    refreshAll();
 
     setInterval(() => {
-    refreshStatus();
-    refreshLatestEvent();
-    }, 5000);
+      refreshAll();
+    }, 1000);
   </script>
 </body>
 </html>

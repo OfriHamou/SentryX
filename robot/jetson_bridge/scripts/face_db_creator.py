@@ -36,6 +36,9 @@ def create_face_db(images_folder_path: str, db_path: str = 'faces_data.db'):
 
 if __name__ == '__main__':
     # Step 1 - build the DB
-    create_face_db(images_folder_path='/Users/dormordechai/Downloads/faces')
+    create_face_db(
+        images_folder_path=r'C:\Users\Ofri\Desktop\CS Colman\3rd year\Final_CS_Project\SentryX\faces',
+        db_path=r'C:\Users\Ofri\Desktop\CS Colman\3rd year\Final_CS_Project\SentryX\faces_data.db'
+    )
     # Step 2 - copy to robot
     # scp faces_data.db jetson_user@<jetson_ip>:/home/jetson_user/robot_project/

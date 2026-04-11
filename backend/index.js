@@ -151,6 +151,14 @@ app.get("/api/robot/events/image/:filename", async (req, res) => {
   }
 });
 
+app.get("/api/robot/detection/health", async (req, res) => {
+  return forwardJson(res, `${JETSON_DETECTION_URL}/health`);
+});
+
+app.get("/api/robot/detection/status", async (req, res) => {
+  return forwardJson(res, `${JETSON_DETECTION_URL}/status`);
+});
+
 app.listen(PORT, () => {
   console.log(`Backend: http://localhost:${PORT}`);
   console.log(`Jetson control bridge: ${JETSON_BASE_URL}`);

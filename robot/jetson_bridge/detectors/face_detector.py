@@ -25,7 +25,7 @@ class FaceDetector:
         except Exception as e:
             print(f"Error loading face database: {e}")
 
-    def detect_faces(self, frame) -> list[dict]:
+    def detect_faces(self, frame):
         small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
         # cv2 works with GBR coloring, we will convert to standard RGB
         rgb_small_frame = small_frame[:, :, ::-1]
