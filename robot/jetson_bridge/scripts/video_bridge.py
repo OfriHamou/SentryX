@@ -92,7 +92,8 @@ def generate_frames():
         yield (
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n"
-            b"Cache-Control: no-cache\r\n\r\n" +
+            b"Content-Length: " + str(len(jpg_bytes)).encode() + b"\r\n"
+            b"\r\n" +
             jpg_bytes +
             b"\r\n"
         )
@@ -123,7 +124,6 @@ def video_feed():
     response.headers["Expires"] = "0"
     response.headers["Connection"] = "keep-alive"
     return response
-
 
 if __name__ == "__main__":
     ensure_capture_thread()
