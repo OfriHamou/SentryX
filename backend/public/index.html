@@ -83,13 +83,29 @@
       word-break: break-word;
     }
 
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+    }
+
     #videoFeed {
       display: block;
       width: 100%;
       max-width: 100%;
       height: auto;
-      border-radius: 12px;
       background: #000;
+    }
+
+    #overlayCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
 
     #latestEventImage {
@@ -110,6 +126,8 @@
       font-weight: bold;
       background: #eee;
       color: #222;
+      margin-right: 8px;
+      margin-bottom: 8px;
     }
 
     .pill.ok {
@@ -145,12 +163,11 @@
 
   <div class="card">
     <h2>Live Video</h2>
-    <img
-      id="videoFeed"
-      src="/api/robot/video"
-      alt="Robot live stream"
-    />
-    <p class="muted">Video is streamed from the robot through the backend.</p>
+    <div class="video-wrapper">
+      <img id="videoFeed" src="/api/robot/video" alt="Robot live stream" />
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+    <p class="muted">Video is streamed from the robot through the backend. The overlay canvas draws green/red boxes from live detection data.</p>
   </div>
 
   <div class="card">
@@ -180,9 +197,7 @@
 
     <div class="status-row">
       Detection summary:
-      <strong id="detectionSummary">
-        <span class="pill">Waiting...</span>
-      </strong>
+      <strong id="detectionSummary"><span class="pill">Waiting...</span></strong>
     </div>
 
     <p class="muted">
@@ -201,10 +216,7 @@
     <div class="status-row">Timestamp: <strong id="latestEventTime">...</strong></div>
     <div class="status-row">Image file: <strong id="latestEventImageName">...</strong></div>
 
-    <img
-      id="latestEventImage"
-      alt="Latest detected event"
-    />
+    <img id="latestEventImage" alt="Latest detected event" />
 
     <p class="muted" id="latestEventNote">No event loaded yet.</p>
   </div>
@@ -215,13 +227,16 @@
   </div>
 
   <script>
+    let latestDetections = [];
+
     function showResponse(data) {
       document.getElementById("output").textContent =
         JSON.stringify(data, null, 2);
     }
 
     function setText(id, value) {
-      document.getElementById(id).textContent = value;
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
     }
 
     function boolText(value) {
@@ -242,19 +257,78 @@
 
       const pills = detections.map((detection) => {
         const name = detection.name || "Unknown";
-        const confidence =
-          typeof detection.confidence === "number"
-            ? ` (${detection.confidence}%)`
-            : "";
+        const confidence = typeof detection.confidence === "number"
+          ? ` (${detection.confidence}%)`
+          : "";
         const cls = detection.is_known ? "ok" : "bad";
         const label = detection.is_known
           ? `${name}${confidence}`
           : `${name}${confidence} - unknown`;
 
-        return `<span class="pill ${cls}" style="margin-right:8px; margin-bottom:8px;">${label}</span>`;
+        return `<span class="pill ${cls}">${label}</span>`;
       });
 
       summaryEl.innerHTML = pills.join("");
+    }
+
+    function resizeOverlayCanvas() {
+      const img = document.getElementById("videoFeed");
+      const canvas = document.getElementById("overlayCanvas");
+
+      const width = img.clientWidth || 0;
+      const height = img.clientHeight || 0;
+
+      if (width > 0 && height > 0) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+    }
+
+    function drawOverlay() {
+      const img = document.getElementById("videoFeed");
+      const canvas = document.getElementById("overlayCanvas");
+      const ctx = canvas.getContext("2d");
+
+      resizeOverlayCanvas();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (!img.naturalWidth || !img.naturalHeight) {
+        return;
+      }
+
+      const scaleX = canvas.width / img.naturalWidth;
+      const scaleY = canvas.height / img.naturalHeight;
+
+      latestDetections.forEach((detection) => {
+        const x = detection.x * scaleX;
+        const y = detection.y * scaleY;
+        const w = detection.w * scaleX;
+        const h = detection.h * scaleY;
+
+        const color = detection.is_known ? "#00ff66" : "#ff3b30";
+        const name = detection.name || "Unknown";
+        const confidence = typeof detection.confidence === "number"
+          ? ` (${detection.confidence}%)`
+          : "";
+        const label = detection.is_known
+          ? `${name}${confidence}`
+          : `${name}`;
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x, y, w, h);
+
+        ctx.font = "16px Arial";
+        const textWidth = ctx.measureText(label).width;
+        const textHeight = 20;
+        const boxX = x;
+        const boxY = Math.max(0, y - textHeight - 6);
+
+        ctx.fillStyle = color;
+        ctx.fillRect(boxX, boxY, textWidth + 12, textHeight + 6);
+        ctx.fillStyle = "#000";
+        ctx.fillText(label, boxX + 6, boxY + 18);
+      });
     }
 
     async function sendMove(speed, rotation) {
@@ -378,12 +452,14 @@
         setText("lastDetectionTime", status.last_detection_time ?? "None");
         setText("lastEventIdDebug", status.last_event_id ?? "None");
 
-        const detections = Array.isArray(status.detections) ? status.detections : [];
+        latestDetections = Array.isArray(status.detections) ? status.detections : [];
         document.getElementById("detectionsJson").textContent =
-          JSON.stringify(detections, null, 2);
+          JSON.stringify(latestDetections, null, 2);
 
-        renderDetectionSummary(detections);
+        renderDetectionSummary(latestDetections);
+        drawOverlay();
       } catch (err) {
+        latestDetections = [];
         setText("detectionHealth", "Unavailable");
         setText("detectionCameraOpened", "Unavailable");
         setText("facesDetectedNow", "Unavailable");
@@ -393,6 +469,7 @@
           `Failed to load detection debug: ${String(err)}`;
         document.getElementById("detectionSummary").innerHTML =
           '<span class="pill bad">Detection debug failed</span>';
+        drawOverlay();
       }
     }
 
@@ -403,6 +480,9 @@
         refreshDetectionDebug()
       ]);
     }
+
+    window.addEventListener("resize", drawOverlay);
+    document.getElementById("videoFeed").addEventListener("load", drawOverlay);
 
     refreshAll();
 
