@@ -23,6 +23,7 @@ latest_status = {
     "ok": True,
     "camera_opened": False,
     "faces_detected": 0,
+    "detections": [],
     "last_event_id": None,
     "last_detection_time": None,
 }
@@ -112,18 +113,37 @@ def list_events():
 def detection_loop():
     global latest_event
 
-    cap = cv2.VideoCapture(STREAM_URL)
-    time.sleep(2)
-
-    with state_lock:
-        latest_status["camera_opened"] = cap.isOpened()
+    cap = None
 
     while True:
+        if cap is None or not cap.isOpened():
+            cap = cv2.VideoCapture(STREAM_URL)
+            time.sleep(1.0)
+
+            with state_lock:
+                latest_status["camera_opened"] = cap.isOpened()
+                if not cap.isOpened():
+                    latest_status["faces_detected"] = 0
+                    latest_status["detections"] = []
+
+            if not cap.isOpened():
+                time.sleep(1.0)
+                continue
+
         ok, frame = cap.read()
 
         if not ok or frame is None:
             with state_lock:
                 latest_status["camera_opened"] = False
+                latest_status["faces_detected"] = 0
+                latest_status["detections"] = []
+
+            try:
+                cap.release()
+            except Exception:
+                pass
+
+            cap = None
             time.sleep(0.1)
             continue
 
@@ -132,13 +152,17 @@ def detection_loop():
         with state_lock:
             latest_status["camera_opened"] = True
             latest_status["faces_detected"] = len(detections)
+            latest_status["detections"] = detections
+
+            if detections:
+                latest_status["last_detection_time"] = datetime.now(timezone.utc).isoformat()
 
         if detections:
             event = save_event(frame, detections)
 
-            with state_lock:
-                latest_status["last_detection_time"] = datetime.now(timezone.utc).isoformat()
-                if event is not None:
+            if event is not None:
+                with state_lock:
+                    latest_event = event
                     latest_status["last_event_id"] = event["id"]
 
         time.sleep(0.1)
