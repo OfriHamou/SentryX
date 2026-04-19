@@ -1,4 +1,4 @@
-import { Entity, CreateDateColumn, ManyToOne, JoinColumn, PrimaryColumn } from "typeorm";
+import { Entity, CreateDateColumn, ManyToOne, JoinColumn, PrimaryColumn, Column } from "typeorm";
 import { Tenant } from "./Tenant";
 import { License } from "./License";
 
@@ -20,4 +20,7 @@ export class TenantLicense {
 
     @CreateDateColumn({ name: "granted_at", type: "timestamp with time zone" })
     grantedAt: Date;
+
+    @Column({ name: "expiration_date", type: "timestamp with time zone", nullable: true })
+    expirationDate: Date;
 }

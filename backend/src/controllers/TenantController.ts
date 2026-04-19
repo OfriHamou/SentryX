@@ -70,7 +70,8 @@ export class TenantController {
             // Extract the actual license objects from the junction table
             const licenses = tenant.tenantLicenses.map(tl => ({
                 ...tl.license,
-                grantedAt: tl.grantedAt
+                grantedAt: tl.grantedAt,
+                expirationDate: tl.expirationDate
             }));
 
             res.status(200).json(licenses);
