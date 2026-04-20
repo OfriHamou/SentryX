@@ -13,3 +13,7 @@ frontend/dist/
 **/devel/
 **/.catkin_tools/
 **/log/
+
+backend/package-lock.json
+backend/node_modules
+backend/dist
