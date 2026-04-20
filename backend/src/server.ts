@@ -1,11 +1,23 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+
+const envPath = path.join(__dirname, "..", ".env");
+const envResult = dotenv.config({ path: envPath });
+
+if (envResult.error) {
+    console.error(`[env] Error loading .env file from ${envPath}:`, envResult.error);
+} else {
+    console.log(`[env] Successfully loaded .env file from ${envPath}`);
+    console.log(`[env] Loaded DB_HOST: ${process.env.DB_HOST}`);
+}
+
 import express from "express";
 import http from "http";
 import cors from "cors";
-import path from "path";
 import "reflect-metadata";
 import { connectDB } from "./db";
 import tenantRoutes from "./routes/tenantRoutes";
+import licenseRoutes from "./routes/licenseRoutes";
 
 export const app = express();
 
@@ -14,6 +26,7 @@ function prerequisites() {
         process.env.SERVER_ADDRESS,
         process.env.CLIENT_ORIGIN || "http://localhost:3000",
         "http://localhost:4000",  // Local server
+        "http://localhost:5173",  // Local FE
     ].filter(Boolean) as string[];
 
     app.use(cors({
@@ -21,7 +34,7 @@ function prerequisites() {
             if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
-                callback(new Error("Not allowed by CORS"));
+                callback(new Error(`Not allowed by CORS" ${origin}`));
             }
         },
         methods: ["GET", "POST", "PUT", "DELETE"],
@@ -44,6 +57,8 @@ function initializeRoutes(app: express.Application) {
 
     // Mount our Tenant routes under /api/tenants
     app.use("/api/tenants", tenantRoutes);
+    // Mount our License routes under /api/licenses
+    app.use("/api/licenses", licenseRoutes);
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
