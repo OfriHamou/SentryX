@@ -9,6 +9,10 @@ router.get("/:id/licenses", TenantController.getTenantLicenses);
 router.get("/:id/robots", TenantController.getTenantRobots);
 
 router.post("/", TenantController.createTenant);
+router.put("/:id", TenantController.updateTenant);
 router.delete("/:id", TenantController.deleteTenant);
+
+router.post("/:id/licenses", TenantController.addTenantLicense);
+router.delete("/:id/licenses/:licenseCode", TenantController.removeTenantLicense);
 
 export default router;
