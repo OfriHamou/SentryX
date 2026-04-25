@@ -1,11 +1,17 @@
 import { Request, Response } from "express";
-import bcrypt from "bcrypt";
 import { QueryFailedError } from "typeorm";
 import { AppDataSource } from "../db";
 import { User } from "../models/User";
 import { Tenant } from "../models/Tenant";
 import { Role } from "../models/Role";
-import { AuthIdentityPayload, signAuthToken } from "../middleware/auth";
+import { signAccessToken } from "../auth/services/token";
+import { hashPassword, verifyPassword } from "../auth/services/password";
+import {
+    issueRefreshTokenSession,
+    revokeRefreshTokenSession,
+    validateRefreshTokenSession
+} from "../auth/services/refreshTokenService";
+import type { AuthIdentityPayload } from "../auth/types";
 
 interface RegisterRequestBody {
     email?: string;
@@ -18,6 +24,10 @@ interface RegisterRequestBody {
 interface LoginRequestBody {
     email?: string;
     password?: string;
+}
+
+interface RefreshRequestBody {
+    refreshToken?: string;
 }
 
 function isValidEmail(email: string): boolean {
@@ -85,7 +95,7 @@ export class AuthController {
                 return;
             }
 
-            const passwordHash = await bcrypt.hash(password, 12);
+            const passwordHash = await hashPassword(password);
             const newUserData: Partial<User> = {
                 email: normalizedEmail,
                 passwordHash,
@@ -152,7 +162,7 @@ export class AuthController {
                 return;
             }
 
-            const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+            const isPasswordValid = await verifyPassword(password, user.passwordHash);
             if (!isPasswordValid) {
                 res.status(401).json({ message: "Invalid credentials" });
                 return;
@@ -165,14 +175,66 @@ export class AuthController {
                 roleName: user.role.roleName
             };
 
-            const token = signAuthToken(payload);
+            const accessToken = signAccessToken(payload);
+            const refreshToken = await issueRefreshTokenSession(user, payload);
 
             res.status(200).json({
-                token,
+                accessToken,
+                refreshToken,
                 user: sanitizeUser(user)
             });
         } catch (error) {
             console.error("Error logging in user:", error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    }
+
+    static async refresh(req: Request, res: Response): Promise<void> {
+        try {
+            const { refreshToken } = req.body as RefreshRequestBody;
+
+            if (!refreshToken || typeof refreshToken !== "string") {
+                res.status(401).json({ message: "Refresh token is required" });
+                return;
+            }
+
+            const { payload, user } = await validateRefreshTokenSession(refreshToken.trim());
+            const accessToken = signAccessToken(payload);
+
+            res.status(200).json({
+                accessToken,
+                refreshToken: refreshToken.trim(),
+                user: sanitizeUser(user)
+            });
+        } catch (error: unknown) {
+            if (error instanceof Error && /refresh token|session/i.test(error.message)) {
+                res.status(401).json({ message: "Invalid or expired refresh token" });
+                return;
+            }
+
+            console.error("Error refreshing access token:", error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    }
+
+    static async logout(req: Request, res: Response): Promise<void> {
+        try {
+            const { refreshToken } = req.body as RefreshRequestBody;
+
+            if (!refreshToken || typeof refreshToken !== "string") {
+                res.status(401).json({ message: "Refresh token is required" });
+                return;
+            }
+
+            await revokeRefreshTokenSession(refreshToken.trim());
+            res.status(200).json({ message: "Logged out successfully" });
+        } catch (error: unknown) {
+            if (error instanceof Error && /refresh token|session/i.test(error.message)) {
+                res.status(401).json({ message: "Invalid or expired refresh token" });
+                return;
+            }
+
+            console.error("Error logging out session:", error);
             res.status(500).json({ message: "Internal server error" });
         }
     }

@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index, OneToMany } from "typeorm";
 import { Tenant } from "./Tenant";
 import { Role } from "./Role";
+import { RefreshTokenSession } from "./RefreshTokenSession";
 
 @Entity("users")
 @Index("idx_users_tenant", ["tenant"])
@@ -28,5 +29,8 @@ export class User {
 
     @CreateDateColumn({ name: "created_at", type: "timestamp with time zone" })
     createdAt: Date;
+
+    @OneToMany(() => RefreshTokenSession, (session) => session.user)
+    refreshTokenSessions: RefreshTokenSession[];
 }
 

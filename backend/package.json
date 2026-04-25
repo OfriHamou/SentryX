@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "test": "NODE_ENV=test jest --forceExit"
+    "test": "NODE_ENV=test jest --forceExit",
+    "migrate:sql": "node scripts/run-sql-migration.js",
+    "migrate:refresh-token-sessions": "node scripts/run-sql-migration.js migrations/2026-04-25-create-refresh-token-sessions.sql"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
