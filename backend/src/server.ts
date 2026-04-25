@@ -18,6 +18,7 @@ import "reflect-metadata";
 import { connectDB } from "./db";
 import tenantRoutes from "./routes/tenantRoutes";
 import licenseRoutes from "./routes/licenseRoutes";
+import authRoutes from "./routes/authRoutes";
 
 export const app = express();
 
@@ -59,6 +60,8 @@ function initializeRoutes(app: express.Application) {
     app.use("/api/tenants", tenantRoutes);
     // Mount our License routes under /api/licenses
     app.use("/api/licenses", licenseRoutes);
+    // Mount auth routes under /api/auth
+    app.use("/api/auth", authRoutes);
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
