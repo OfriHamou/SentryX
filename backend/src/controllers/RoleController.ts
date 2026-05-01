@@ -2,7 +2,8 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../db";
 import { Role } from "../models/Role";
 
-type AllowedPagesPayload = string[];
+type PermissionAction = "read" | "write";
+type AllowedPagesPayload = Record<string, PermissionAction[]>;
 
 interface RoleWritePayload {
     roleName?: unknown;
@@ -18,27 +19,48 @@ function validateRoleName(roleName: unknown): { value?: string; error?: string }
 }
 
 function validateAllowedPagesPayload(allowedPages: unknown): { value?: AllowedPagesPayload; error?: string } {
-    if (!Array.isArray(allowedPages) || allowedPages.length === 0) {
-        return { error: "allowedPages must be a non-empty array of page strings" };
+    if (!allowedPages || typeof allowedPages !== "object" || Array.isArray(allowedPages)) {
+        return { error: "allowedPages must be an object in the format { resource: [\"read\", \"write\"] }" };
     }
 
-    const normalized: AllowedPagesPayload = [];
-    const seen = new Set<string>();
+    const normalized: AllowedPagesPayload = {};
+    const validActions = new Set<PermissionAction>(["read", "write"]);
 
-    for (const pageValue of allowedPages) {
-        if (typeof pageValue !== "string") {
-            return { error: "allowedPages can only contain strings" };
+    for (const [rawResource, rawActions] of Object.entries(allowedPages as Record<string, unknown>)) {
+        const resource = rawResource.trim().toLowerCase();
+        if (!resource) {
+            return { error: "allowedPages contains an invalid resource key" };
         }
 
-        const page = pageValue.trim().toLowerCase();
-        if (!page) {
-            return { error: "allowedPages cannot contain empty page names" };
+        if (!Array.isArray(rawActions) || rawActions.length === 0) {
+            return { error: `allowedPages.${resource} must be a non-empty array` };
         }
 
-        if (!seen.has(page)) {
-            seen.add(page);
-            normalized.push(page);
+        const normalizedActions: PermissionAction[] = [];
+        const seen = new Set<PermissionAction>();
+
+        for (const rawAction of rawActions) {
+            if (typeof rawAction !== "string") {
+                return { error: `allowedPages.${resource} can only contain string actions` };
+            }
+
+            const action = rawAction.trim().toLowerCase();
+            if (!validActions.has(action as PermissionAction)) {
+                return { error: `allowedPages.${resource} contains unsupported action \"${rawAction}\"` };
+            }
+
+            const typedAction = action as PermissionAction;
+            if (!seen.has(typedAction)) {
+                seen.add(typedAction);
+                normalizedActions.push(typedAction);
+            }
         }
+
+        normalized[resource] = normalizedActions;
+    }
+
+    if (Object.keys(normalized).length === 0) {
+        return { error: "allowedPages must define at least one resource" };
     }
 
     return { value: normalized };
