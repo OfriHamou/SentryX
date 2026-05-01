@@ -16,6 +16,7 @@ function normalizePermission(value: string): string {
 
 function collectPermissionsFromRole(allowedPages: unknown): Set<string> {
     const normalized = new Set<string>();
+    const allowedActions = new Set(["read", "write"]);
 
     const add = (permission: string) => {
         const normalizedPermission = normalizePermission(permission);
@@ -31,7 +32,13 @@ function collectPermissionsFromRole(allowedPages: unknown): Set<string> {
     if (Array.isArray(allowedPages)) {
         for (const entry of allowedPages) {
             if (typeof entry === "string") {
-                add(entry);
+                const value = normalizePermission(entry);
+                if (value === "all" || value === "*") {
+                    add("all");
+                } else {
+                    add(value);
+                    add(`${value}:read`);
+                }
             }
         }
         return normalized;
@@ -42,32 +49,26 @@ function collectPermissionsFromRole(allowedPages: unknown): Set<string> {
     }
 
     for (const [resource, value] of Object.entries(allowedPages as AllowedPagesShape)) {
-        if (typeof value === "boolean") {
-            if (value) {
-                add(resource);
+        const normalizedResource = normalizePermission(resource);
+        if (!normalizedResource || !Array.isArray(value)) {
+            continue;
+        }
+
+        if (normalizedResource === "all" || normalizedResource === "*") {
+            if (value.some((action) => typeof action === "string" && allowedActions.has(normalizePermission(action)))) {
+                add("all");
             }
             continue;
         }
 
-        if (typeof value === "string") {
-            add(`${resource}:${value}`);
-            continue;
-        }
-
-        if (Array.isArray(value)) {
-            for (const action of value) {
-                if (typeof action === "string") {
-                    add(`${resource}:${action}`);
-                }
+        for (const action of value) {
+            if (typeof action !== "string") {
+                continue;
             }
-            continue;
-        }
 
-        if (value && typeof value === "object") {
-            for (const [action, isAllowed] of Object.entries(value as Record<string, unknown>)) {
-                if (isAllowed === true) {
-                    add(`${resource}:${action}`);
-                }
+            const normalizedAction = normalizePermission(action);
+            if (allowedActions.has(normalizedAction)) {
+                add(`${normalizedResource}:${normalizedAction}`);
             }
         }
     }
