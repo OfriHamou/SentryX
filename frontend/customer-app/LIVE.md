@@ -106,7 +106,7 @@ Robot (Jetson, Python)
   ├─ video_bridge.py      (port 5001, MJPEG stream)
   └─ detection_bridge.py  (port 5002, face detection + events)
         ↓
-Backend (Node, Express, port 3001)
+Backend (Node, Express, port 4000)
   backend/index.js — proxy to Jetson
         ↓
 Frontend API layer
