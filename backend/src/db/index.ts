@@ -8,6 +8,7 @@ import { RobotConfig } from "../models/RobotConfig";
 import { Event } from "../models/Event";
 import { License } from "../models/License";
 import { TenantLicense } from "../models/TenantLicense";
+import { RefreshTokenSession } from "../models/RefreshTokenSession";
 import mongoose from "mongoose";
 
 const dbUser = process.env.DB_USER;
@@ -36,7 +37,8 @@ export const AppDataSource = new DataSource({
         RobotConfig,
         Event,
         License,
-        TenantLicense
+        TenantLicense,
+        RefreshTokenSession
     ],
     migrations: [],
     subscribers: [],

@@ -19,6 +19,8 @@ import { connectDB } from "./db";
 import tenantRoutes from "./routes/tenantRoutes";
 import licenseRoutes from "./routes/licenseRoutes";
 import robotRoutes from "./routes/robotRoutes";
+import authRoutes from "./routes/authRoutes";
+import roleRoutes from "./routes/roleRoutes";
 
 export const app = express();
 
@@ -61,6 +63,10 @@ function initializeRoutes(app: express.Application) {
 
     // Mount our License routes under /api/licenses
     app.use("/api/licenses", licenseRoutes);
+    // Mount our Role routes under /api/roles
+    app.use("/api/roles", roleRoutes);
+    // Mount auth routes under /api/auth
+    app.use("/api/auth", authRoutes);
 
     // Mount our Robot routes under /api/robot
     app.use("/api/robot", robotRoutes);
