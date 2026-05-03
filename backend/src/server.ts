@@ -20,6 +20,7 @@ import tenantRoutes from "./routes/tenantRoutes";
 import licenseRoutes from "./routes/licenseRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
+import eventRoutes from "./routes/eventRoutes";
 
 export const app = express();
 
@@ -65,6 +66,8 @@ function initializeRoutes(app: express.Application) {
     app.use("/api/roles", roleRoutes);
     // Mount auth routes under /api/auth
     app.use("/api/auth", authRoutes);
+    // Mount event routes under /api/events
+    app.use("/api/events", eventRoutes);
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
