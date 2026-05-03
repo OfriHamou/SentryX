@@ -18,6 +18,7 @@ import "reflect-metadata";
 import { connectDB } from "./db";
 import tenantRoutes from "./routes/tenantRoutes";
 import licenseRoutes from "./routes/licenseRoutes";
+import robotRoutes from "./routes/robotRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
 
@@ -59,12 +60,16 @@ function initializeRoutes(app: express.Application) {
 
     // Mount our Tenant routes under /api/tenants
     app.use("/api/tenants", tenantRoutes);
+
     // Mount our License routes under /api/licenses
     app.use("/api/licenses", licenseRoutes);
     // Mount our Role routes under /api/roles
     app.use("/api/roles", roleRoutes);
     // Mount auth routes under /api/auth
     app.use("/api/auth", authRoutes);
+
+    // Mount our Robot routes under /api/robot
+    app.use("/api/robot", robotRoutes);
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
@@ -81,7 +86,11 @@ async function runServer() {
     // Make sure this is the last function we are calling
     initializeRoutes(app);
 
-    await connectDB();
+    try {
+        await connectDB();
+    } catch (error) {
+        console.warn('[db] Connection failed - server continues without DB:', error);
+    }
 
     const port = Number(process.env.PORT || 4000);
 
