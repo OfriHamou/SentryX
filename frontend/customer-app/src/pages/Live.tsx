@@ -73,6 +73,7 @@ export default function Live() {
                         location={robot?.location ?? '—'}
                         batteryStatus={battery?.status ?? null}
                         batteryVoltage={battery?.voltage ?? null}
+                        detections={detection?.detections ?? []}  
                         onFullscreenToggle={toggleFullscreen}
                     />
 
