@@ -1,6 +1,7 @@
-import { AppBar, Toolbar, Box, Button, Container } from '@mui/material';
+import { AppBar, Toolbar, Box, Button, Container, Typography } from '@mui/material';
 import { NavLink, Outlet } from 'react-router-dom';
 import logoImg from '../assets/LOGO.png';
+import { useCustomerAuth } from '../auth/CustomerAuthProvider';
 
 const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
@@ -8,6 +9,8 @@ const navItems = [
 ];
 
 export default function AppLayout() {
+    const { logout, user } = useCustomerAuth();
+
     return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
             <AppBar position="static" sx={{ bgcolor: '#1F2433' }}>
@@ -33,7 +36,19 @@ export default function AppLayout() {
                         </Button>
                     ))}
                     <Box sx={{ flexGrow: 1 }} />
-                    <Button variant="contained" sx={{ bgcolor: 'rgba(255, 255, 255, 0.1)' }}>
+                    {user?.fullName && (
+                        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.7)', mr: 2 }}>
+                            {user.fullName}
+                        </Typography>
+                    )}
+                    <Button
+                        variant="contained"
+                        sx={{
+                            bgcolor: 'rgba(255, 255, 255, 0.7)',
+                            '&:hover': { bgcolor: '#A01414' }
+                        }}
+                        onClick={logout}
+                    >
                         Logout
                     </Button>
                 </Toolbar>
