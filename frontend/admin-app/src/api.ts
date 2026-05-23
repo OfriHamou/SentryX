@@ -1,8 +1,89 @@
 import axios from 'axios';
+import type { AuthUser } from './auth/authTypes';
+import { clearStoredTokens, getStoredAccessToken, getStoredRefreshToken, setStoredTokens } from './auth/authStorage';
 
-const api = axios.create({
-    baseURL: 'http://localhost:4000/api',
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
+
+export const api = axios.create({
+    baseURL: API_BASE_URL,
 });
+
+type AuthCallbacks = {
+    onAuthFailure?: () => void;
+    onTokenRefresh?: (accessToken: string, user?: AuthUser, refreshToken?: string) => void;
+};
+
+let authCallbacks: AuthCallbacks = {};
+
+export const setAuthCallbacks = (callbacks: AuthCallbacks) => {
+    authCallbacks = callbacks;
+};
+
+// Add authorization header to all requests
+api.interceptors.request.use((config) => {
+    const token = getStoredAccessToken();
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+let refreshPromise: Promise<{ accessToken: string; refreshToken?: string; user?: AuthUser } | null> | null = null;
+
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+        const status = error?.response?.status;
+
+        const isAuthRoute = typeof originalRequest?.url === 'string' && originalRequest.url.includes('/auth/');
+
+        if (status === 401 && originalRequest && !originalRequest._retry && !isAuthRoute) {
+            const refreshToken = getStoredRefreshToken();
+            if (!refreshToken) {
+                clearStoredTokens();
+                authCallbacks.onAuthFailure?.();
+                return Promise.reject(error);
+            }
+
+            if (!refreshPromise) {
+                refreshPromise = axios
+                    .post<{ accessToken: string; refreshToken?: string; user?: AuthUser }>(`${API_BASE_URL}/auth/refresh`, { refreshToken })
+                    .then((response) => response.data)
+                    .then((data) => {
+                        if (!data?.accessToken) {
+                            return null;
+                        }
+
+                        setStoredTokens(data.accessToken, data.refreshToken ?? refreshToken);
+                        authCallbacks.onTokenRefresh?.(data.accessToken, data.user, data.refreshToken ?? refreshToken);
+                        return data;
+                    })
+                    .catch(() => null)
+                    .finally(() => {
+                        refreshPromise = null;
+                    });
+            }
+
+            const refreshed = await refreshPromise;
+            if (!refreshed?.accessToken) {
+                clearStoredTokens();
+                authCallbacks.onAuthFailure?.();
+                return Promise.reject(error);
+            }
+
+            originalRequest._retry = true;
+            originalRequest.headers = {
+                ...originalRequest.headers,
+                Authorization: `Bearer ${refreshed.accessToken}`
+            };
+
+            return api(originalRequest);
+        }
+
+        return Promise.reject(error);
+    }
+);
 
 export const getTenants = () => api.get('/tenants').then(res => res.data);
 export const createTenant = (name: string) => api.post('/tenants', { name }).then(res => res.data);
