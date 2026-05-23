@@ -21,6 +21,7 @@ import licenseRoutes from "./routes/licenseRoutes";
 import robotRoutes from "./routes/robotRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
+import eventRoutes from "./routes/eventRoutes";
 
 export const app = express();
 
@@ -68,6 +69,8 @@ function initializeRoutes(app: express.Application) {
     app.use("/api/roles", roleRoutes);
     // Mount auth routes under /api/auth
     app.use("/api/auth", authRoutes);
+    // Mount event routes under /api/events
+    app.use("/api/events", eventRoutes);
 
     // Mount our Robot routes under /api/robot
     app.use("/api/robot", robotRoutes);
