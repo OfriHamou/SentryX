@@ -10,6 +10,7 @@ import { License } from "../models/License";
 import { TenantLicense } from "../models/TenantLicense";
 import { RefreshTokenSession } from "../models/RefreshTokenSession";
 import mongoose from "mongoose";
+import { logger } from "../utils/logger";
 
 const dbUser = process.env.DB_USER;
 const dbPassword = process.env.DB_PASSWORD;
@@ -27,7 +28,7 @@ export const AppDataSource = new DataSource({
     type: "postgres",
     url: dbUrl,
     synchronize: false, // Turn off synchronize in production, use migrations instead
-    logging: process.env.NODE_ENV !== "production",
+    logging: process.env.TYPEORM_LOGGING === "true",
     entities: [
         Tenant,
         Role,
@@ -48,6 +49,12 @@ export async function connectDB() {
     try {
         await AppDataSource.initialize();
         console.log("PostgreSQL mapping established successfully.");
+        logger.info("PostgreSQL connection established successfully.", {
+            category: "DATABASE",
+            action: "POSTGRES_CONNECTED",
+            status: "SUCCESS",
+            context: "db"
+        });
 
         // Connect to MongoDB
         const mUser = process.env.MONGO_USER;
@@ -64,9 +71,20 @@ export async function connectDB() {
         }
 
         await mongoose.connect(mongoUrl);
-        console.log("MongoDB connection established successfully.");
+        logger.info("MongoDB connection established successfully.", {
+            category: "DATABASE",
+            action: "MONGODB_CONNECTED",
+            status: "SUCCESS",
+            context: "db"
+        });
 
     } catch (error) {
+        logger.error("Database initialization failed", error, {
+            category: "DATABASE",
+            action: "DB_INIT_FAILED",
+            status: "FAILED",
+            context: "db"
+        });
         console.error("Error during Data Source initialization:", error);
         throw error;
     }

@@ -2,6 +2,20 @@ import { NextFunction, Request, Response } from "express";
 import { AppDataSource } from "../db";
 import { Role } from "../models/Role";
 import type { AuthIdentityPayload } from "../auth/types";
+import { logger } from "../utils/logger";
+
+function getRequestId(req: Request): string | undefined {
+    const header = req.headers["x-request-id"];
+    if (typeof header === "string" && header.trim().length > 0) {
+        return header.trim();
+    }
+
+    if (Array.isArray(header) && typeof header[0] === "string" && header[0].trim().length > 0) {
+        return header[0].trim();
+    }
+
+    return undefined;
+}
 
 type AllowedPagesShape = Record<string, unknown> | string[];
 
@@ -134,6 +148,22 @@ export function hasAccess(resource: string, action?: string) {
             const role = await roleRepo.findOneBy({ id: auth.roleId });
 
             if (!role) {
+                logger.warn("Forbidden access", {
+                    category: "SECURITY",
+                    action: "FORBIDDEN_ROLE_NOT_FOUND",
+                    status: "FAILED",
+                    context: "PermissionMiddleware",
+                    userId: auth.userId,
+                    requestId: getRequestId(req),
+                    metadata: {
+                        roleId: auth.roleId,
+                        method: req.method,
+                        route: req.originalUrl,
+                        resource,
+                        action: action || "read",
+                        reason: "ROLE_NOT_FOUND"
+                    }
+                });
                 res.status(403).json({ message: "Forbidden" });
                 return;
             }
@@ -142,6 +172,22 @@ export function hasAccess(resource: string, action?: string) {
             const allowed = roleAllows(permissionSet, resource, action);
 
             if (!allowed) {
+                logger.warn("Forbidden access", {
+                    category: "SECURITY",
+                    action: "FORBIDDEN_PERMISSION_DENIED",
+                    status: "FAILED",
+                    context: "PermissionMiddleware",
+                    userId: auth.userId,
+                    requestId: getRequestId(req),
+                    metadata: {
+                        roleId: auth.roleId,
+                        method: req.method,
+                        route: req.originalUrl,
+                        resource,
+                        action: action || "read",
+                        reason: "PERMISSION_DENIED"
+                    }
+                });
                 res.status(403).json({ message: "Forbidden" });
                 return;
             }

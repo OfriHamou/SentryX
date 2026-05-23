@@ -12,6 +12,7 @@ import {
     validateRefreshTokenSession
 } from "../auth/services/refreshTokenService";
 import type { AuthIdentityPayload } from "../auth/types";
+import { logger } from "../utils/logger";
 
 interface RegisterRequestBody {
     email?: string;
@@ -47,6 +48,46 @@ function sanitizeUser(user: User) {
     };
 }
 
+function getRequestId(req: Request): string | undefined {
+    const header = req.headers["x-request-id"];
+    if (typeof header === "string" && header.trim().length > 0) {
+        return header.trim();
+    }
+
+    if (Array.isArray(header) && typeof header[0] === "string" && header[0].trim().length > 0) {
+        return header[0].trim();
+    }
+
+    return undefined;
+}
+
+function buildAuthMeta(
+    req: Request,
+    base: Record<string, unknown>,
+    auth?: AuthIdentityPayload
+): Record<string, unknown> {
+    const meta: Record<string, unknown> = {
+        ...base,
+        context: "AuthController",
+        requestId: getRequestId(req)
+    };
+
+    if (req.ip) {
+        meta.ip = req.ip;
+    }
+
+    const userAgent = req.get("user-agent");
+    if (userAgent) {
+        meta.userAgent = userAgent;
+    }
+
+    if (auth?.userId) {
+        meta.userId = auth.userId;
+    }
+
+    return meta;
+}
+
 export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
@@ -80,18 +121,47 @@ export class AuthController {
 
             const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
             if (existingUser) {
+                logger.warn("Register failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REGISTER_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        email: normalizedEmail,
+                        reason: "EMAIL_ALREADY_REGISTERED"
+                    }
+                }));
                 res.status(409).json({ message: "Email is already registered" });
                 return;
             }
 
             const tenant = await tenantRepo.findOneBy({ id: tenantId });
             if (!tenant) {
+                logger.warn("Register failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REGISTER_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        email: normalizedEmail,
+                        tenantId,
+                        reason: "TENANT_NOT_FOUND"
+                    }
+                }));
                 res.status(404).json({ message: "Tenant not found" });
                 return;
             }
 
             const role = await roleRepo.findOneBy({ id: numericRoleId });
             if (!role) {
+                logger.warn("Register failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REGISTER_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        email: normalizedEmail,
+                        roleId: numericRoleId,
+                        reason: "ROLE_NOT_FOUND"
+                    }
+                }));
                 res.status(404).json({ message: "Role not found" });
                 return;
             }
@@ -117,20 +187,57 @@ export class AuthController {
             });
 
             if (!userWithRelations) {
+                logger.error("Register failed", undefined, buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REGISTER_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        email: normalizedEmail,
+                        reason: "USER_RELOAD_FAILED"
+                    }
+                }));
                 res.status(500).json({ message: "Unable to load created user" });
                 return;
             }
+
+            logger.info("Register success", buildAuthMeta(req, {
+                category: "AUTH",
+                action: "REGISTER_SUCCESS",
+                status: "SUCCESS",
+                userId: userWithRelations.id,
+                metadata: {
+                    email: userWithRelations.email,
+                    tenantId: userWithRelations.tenant?.id,
+                    roleId: userWithRelations.role?.id
+                }
+            }));
 
             res.status(201).json({ user: sanitizeUser(userWithRelations) });
         } catch (error: unknown) {
             if (error instanceof QueryFailedError) {
                 const dbError = error as QueryFailedError & { driverError?: { code?: string } };
                 if (dbError.driverError?.code === "23505") {
+                    logger.warn("Register failed", buildAuthMeta(req, {
+                        category: "AUTH",
+                        action: "REGISTER_FAILED",
+                        status: "FAILED",
+                        metadata: {
+                            reason: "EMAIL_ALREADY_REGISTERED"
+                        }
+                    }));
                     res.status(409).json({ message: "Email is already registered" });
                     return;
                 }
             }
 
+            logger.error("Register failed", error, buildAuthMeta(req, {
+                category: "AUTH",
+                action: "REGISTER_FAILED",
+                status: "FAILED",
+                metadata: {
+                    reason: "UNEXPECTED_ERROR"
+                }
+            }));
             console.error("Error registering user:", error);
             res.status(500).json({ message: "Internal server error" });
         }
@@ -151,6 +258,14 @@ export class AuthController {
             }
 
             const normalizedEmail = email.trim().toLowerCase();
+            logger.info("Login attempt", buildAuthMeta(req, {
+                category: "AUTH",
+                action: "LOGIN_ATTEMPT",
+                status: "ATTEMPT",
+                metadata: {
+                    email: normalizedEmail
+                }
+            }));
             const userRepo = AppDataSource.getRepository(User);
 
             const user = await userRepo.findOne({
@@ -159,12 +274,31 @@ export class AuthController {
             });
 
             if (!user) {
+                logger.warn("Login failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGIN_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        email: normalizedEmail,
+                        reason: "USER_NOT_FOUND"
+                    }
+                }));
                 res.status(401).json({ message: "Invalid credentials" });
                 return;
             }
 
             const isPasswordValid = await verifyPassword(password, user.passwordHash);
             if (!isPasswordValid) {
+                logger.warn("Login failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGIN_FAILED",
+                    status: "FAILED",
+                    userId: user.id,
+                    metadata: {
+                        email: normalizedEmail,
+                        reason: "INVALID_PASSWORD"
+                    }
+                }));
                 res.status(401).json({ message: "Invalid credentials" });
                 return;
             }
@@ -179,12 +313,32 @@ export class AuthController {
             const accessToken = signAccessToken(payload);
             const refreshToken = await issueRefreshTokenSession(user, payload);
 
+            logger.info("Login success", buildAuthMeta(req, {
+                category: "AUTH",
+                action: "LOGIN_SUCCESS",
+                status: "SUCCESS",
+                userId: user.id,
+                metadata: {
+                    email: user.email,
+                    tenantId: user.tenant.id,
+                    roleId: user.role.id
+                }
+            }, payload));
+
             res.status(200).json({
                 accessToken,
                 refreshToken,
                 user: sanitizeUser(user)
             });
         } catch (error) {
+            logger.error("Login failed", error, buildAuthMeta(req, {
+                category: "AUTH",
+                action: "LOGIN_FAILED",
+                status: "FAILED",
+                metadata: {
+                    reason: "INVALID_CREDENTIALS"
+                }
+            }));
             console.error("Error logging in user:", error);
             res.status(500).json({ message: "Internal server error" });
         }
@@ -195,12 +349,31 @@ export class AuthController {
             const { refreshToken } = req.body as RefreshRequestBody;
 
             if (!refreshToken || typeof refreshToken !== "string") {
+                logger.warn("Refresh failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REFRESH_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        reason: "REFRESH_TOKEN_REQUIRED"
+                    }
+                }));
                 res.status(401).json({ message: "Refresh token is required" });
                 return;
             }
 
             const { payload, user } = await validateRefreshTokenSession(refreshToken.trim());
             const accessToken = signAccessToken(payload);
+
+            logger.info("Refresh success", buildAuthMeta(req, {
+                category: "AUTH",
+                action: "REFRESH_SUCCESS",
+                status: "SUCCESS",
+                userId: payload.userId,
+                metadata: {
+                    tenantId: payload.tenantId,
+                    roleId: payload.roleId
+                }
+            }, payload));
 
             res.status(200).json({
                 accessToken,
@@ -209,10 +382,26 @@ export class AuthController {
             });
         } catch (error: unknown) {
             if (error instanceof Error && /refresh token|session/i.test(error.message)) {
+                logger.warn("Refresh failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "REFRESH_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        reason: "INVALID_REFRESH_TOKEN"
+                    }
+                }));
                 res.status(401).json({ message: "Invalid or expired refresh token" });
                 return;
             }
 
+            logger.error("Refresh failed", error, buildAuthMeta(req, {
+                category: "AUTH",
+                action: "REFRESH_FAILED",
+                status: "FAILED",
+                metadata: {
+                    reason: "UNEXPECTED_ERROR"
+                }
+            }));
             console.error("Error refreshing access token:", error);
             res.status(500).json({ message: "Internal server error" });
         }
@@ -223,18 +412,47 @@ export class AuthController {
             const { refreshToken } = req.body as RefreshRequestBody;
 
             if (!refreshToken || typeof refreshToken !== "string") {
+                logger.warn("Logout failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGOUT_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        reason: "REFRESH_TOKEN_REQUIRED"
+                    }
+                }));
                 res.status(401).json({ message: "Refresh token is required" });
                 return;
             }
 
             await revokeRefreshTokenSession(refreshToken.trim());
+            logger.info("Logout success", buildAuthMeta(req, {
+                category: "AUTH",
+                action: "LOGOUT_SUCCESS",
+                status: "SUCCESS"
+            }));
             res.status(200).json({ message: "Logged out successfully" });
         } catch (error: unknown) {
             if (error instanceof Error && /refresh token|session/i.test(error.message)) {
+                logger.warn("Logout failed", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGOUT_FAILED",
+                    status: "FAILED",
+                    metadata: {
+                        reason: "INVALID_REFRESH_TOKEN"
+                    }
+                }));
                 res.status(401).json({ message: "Invalid or expired refresh token" });
                 return;
             }
 
+            logger.error("Logout failed", error, buildAuthMeta(req, {
+                category: "AUTH",
+                action: "LOGOUT_FAILED",
+                status: "FAILED",
+                metadata: {
+                    reason: "UNEXPECTED_ERROR"
+                }
+            }));
             console.error("Error logging out session:", error);
             res.status(500).json({ message: "Internal server error" });
         }

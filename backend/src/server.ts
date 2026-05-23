@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import path from "path";
+import fs from "fs";
 
 const envPath = path.join(__dirname, "..", ".env");
 const envResult = dotenv.config({ path: envPath });
@@ -22,6 +23,7 @@ import robotRoutes from "./routes/robotRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
 import eventRoutes from "./routes/eventRoutes";
+import { logger } from "./utils/logger";
 
 export const app = express();
 
@@ -56,6 +58,9 @@ function prerequisites() {
 }
 
 function initializeRoutes(app: express.Application) {
+    const clientDistPath = path.join(__dirname, "..", "..", "frontend", "build");
+    const clientIndexPath = path.join(clientDistPath, "index.html");
+
     app.get("/api/health", (req, res) => {
         res.status(200).json({ status: "OK" });
     });
@@ -77,8 +82,12 @@ function initializeRoutes(app: express.Application) {
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
-        const clientDistPath = path.join(__dirname, "..", "..", "frontend", "build");
-        res.sendFile(path.join(clientDistPath, "index.html"));
+        if (fs.existsSync(clientIndexPath)) {
+            res.sendFile(clientIndexPath);
+            return;
+        }
+
+        res.status(404).json({ message: "Frontend build not found" });
     });
 }
 
@@ -103,6 +112,13 @@ async function runServer() {
             server.removeAllListeners('error');
             server.listen(port, () => {
                 console.log(`Service is listening on port ${port}`);
+                logger.info(`Service is listening on port ${port}`, {
+                    category: "SYSTEM",
+                    action: "SERVER_STARTED",
+                    status: "SUCCESS",
+                    context: "server",
+                    metadata: { port }
+                });
             });
             server.on('error', (err: NodeJS.ErrnoException) => {
                 if (err.code === 'EADDRINUSE' && attemptsLeft > 0) {
@@ -117,12 +133,37 @@ async function runServer() {
         };
         startListening(5);
 
-        const shutdown = () => {
-            server.close(() => process.exit(0));
-            setTimeout(() => process.exit(0), 1500).unref();
+        const shutdown = (signal: "SIGTERM" | "SIGINT") => () => {
+            logger.info("Server shutdown signal received", {
+                category: "SYSTEM",
+                action: "SERVER_SHUTDOWN_SIGNAL",
+                status: "STARTED",
+                context: "server",
+                metadata: { signal }
+            });
+
+            const forceExitTimer = setTimeout(() => process.exit(0), 1500);
+            forceExitTimer.unref();
+
+            void logger.flush()
+                .catch((error) => {
+                    console.error("[logger] Flush failed during shutdown:", error);
+                })
+                .finally(() => {
+                    server.close(() => {
+                        logger.info("Server shutdown complete", {
+                            category: "SYSTEM",
+                            action: "SERVER_SHUTDOWN_COMPLETE",
+                            status: "SUCCESS",
+                            context: "server"
+                        });
+                        clearTimeout(forceExitTimer);
+                        process.exit(0);
+                    });
+                });
         };
-        process.on('SIGTERM', shutdown);
-        process.on('SIGINT',  shutdown);
+        process.on('SIGTERM', shutdown('SIGTERM'));
+        process.on('SIGINT',  shutdown('SIGINT'));
     }
 }
 
