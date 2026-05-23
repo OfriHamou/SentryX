@@ -42,7 +42,8 @@ function sanitizeUser(user: User) {
         tenantId: user.tenant?.id,
         roleId: user.role?.id,
         roleName: user.role?.roleName,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        allowedPages: user.role?.allowedPages ?? {},
     };
 }
 
