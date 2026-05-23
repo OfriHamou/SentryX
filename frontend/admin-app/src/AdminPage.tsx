@@ -23,6 +23,8 @@ import {
     TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import * as api from './api';
+import { hasPermission, useAuth } from './auth/AuthContext';
+import { PermissionGate } from './components/PermissionGate';
 // @ts-ignore
 import logoImg from './assets/LOGO.PNG';
 
@@ -56,9 +58,14 @@ const formatDate = (dateString?: string) => {
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
-export const AdminPage = () => {
+interface AdminPageProps {
+    onLogout?: () => void;
+}
+
+export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const [activeTab, setActiveTab] = useState('Dashboard');
     const [alerts, setAlerts] = useState<any[]>([]);
+    const { user } = useAuth();
 
     const [tenants, setTenants] = useState<any[]>([]);
     const [availableLicenses, setAvailableLicenses] = useState<any[]>([]);
@@ -71,20 +78,47 @@ export const AdminPage = () => {
     const [tenantName, setTenantName] = useState('');
     const [selectedLicense, setSelectedLicense] = useState('');
     const [expirationDate, setExpirationDate] = useState('');
+    // Permissions
+    const canRead = (resource: string) => hasPermission(user?.allowedPages, resource, 'read');
+    const canReadTenants = canRead('tenants');
+    const canReadLicenses = canRead('licenses');
+    const canReadAlerts = canRead('alerts');
+    const canAccessDashboard = canRead('dashboard') || canReadTenants || canReadLicenses || canReadAlerts;
+    const canAccessTenants = canReadTenants;
+    const canAccessAnalytics = canRead('analytics') || canRead('reports');
+    const canAccessAlerts = canReadAlerts;
+    const canAccessSettings = canRead('settings') || canRead('roles');
+
     useEffect(() => {
         loadData();
-    }, []);
+    }, [canReadTenants, canReadLicenses, canReadAlerts]);
+
     const loadData = async () => {
         setLoading(true);
         try {
-            const [tenantData, licenseData, alertsData] = await Promise.all([
-                api.getTenants(),
-                api.getLicenses(),
-                api.getAlerts()
+            const [tenantResult, licenseResult, alertsResult] = await Promise.allSettled([
+                canReadTenants ? api.getTenants() : Promise.resolve([]),
+                canReadLicenses ? api.getLicenses() : Promise.resolve([]),
+                canReadAlerts ? api.getAlerts() : Promise.resolve([])
             ]);
-            setTenants(tenantData);
-            setAvailableLicenses(licenseData);
-            setAlerts(alertsData || []);
+
+            if (tenantResult.status === 'fulfilled') {
+                setTenants(tenantResult.value);
+            } else {
+                setTenants([]);
+            }
+
+            if (licenseResult.status === 'fulfilled') {
+                setAvailableLicenses(licenseResult.value);
+            } else {
+                setAvailableLicenses([]);
+            }
+
+            if (alertsResult.status === 'fulfilled') {
+                setAlerts(alertsResult.value || []);
+            } else {
+                setAlerts([]);
+            }
         } catch (error) {
             console.error("Failed to load data", error);
         } finally {
@@ -251,11 +285,26 @@ export const AdminPage = () => {
                             <NotificationsIcon />
                         </IconButton>
                         <Avatar sx={{ bgcolor: '#11047A', width: 40, height: 40, fontWeight: 'bold' }}>AD</Avatar>
+                        {onLogout && (
+                            <Button
+                                onClick={onLogout}
+                                sx={{
+                                    ml: 1,
+                                    textTransform: 'none',
+                                    fontWeight: 700,
+                                    color: '#EE5D50',
+                                    fontSize: '0.9rem',
+                                    '&:hover': { backgroundColor: '#FDECEB' }
+                                }}
+                            >
+                                Logout
+                            </Button>
+                        )}
                     </Box>
                 </Box>
 
                 {activeTab === 'Dashboard' && (
-                    <>
+                    <PermissionGate allowed={canAccessDashboard} deniedMessage="You do not have permission to view this page.">
                         {/* Dashboard Metric KPI Cards */}
                         <Grid container spacing={3} sx={{ mb: 4 }}>
                             {[
@@ -335,119 +384,133 @@ export const AdminPage = () => {
                                 </Card>
                             </Grid>
                         </Grid>
-                    </>
+                    </PermissionGate>
                 )}
 
                 {activeTab === 'Tenants' && (
-                    <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', overflow: 'hidden', backgroundColor: '#fff', border: 'none' }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3, pt: 4, px: 4, backgroundColor: '#fff' }}>
-                            <Box>
-                                <Typography variant="h5" sx={{ fontWeight: 700, color: '#2B3674' }}>
-                                    Organizations Directory
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: '#A3AED0', mt: 0.5, fontWeight: 500 }}>Manage platform tenants and License sets</Typography>
+                    <PermissionGate allowed={canAccessTenants} deniedMessage="You do not have permission to access this section.">
+                        <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', overflow: 'hidden', backgroundColor: '#fff', border: 'none' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3, pt: 4, px: 4, backgroundColor: '#fff' }}>
+                                <Box>
+                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#2B3674' }}>
+                                        Organizations Directory
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: '#A3AED0', mt: 0.5, fontWeight: 500 }}>Manage platform tenants and License sets</Typography>
+                                </Box>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    startIcon={<AddCircleOutlineIcon />}
+                                    onClick={() => { setTenantName(''); setOpenAddModal(true); }}
+                                    sx={{ borderRadius: '12px', textTransform: 'none', px: 3, py: 1.5, backgroundColor: '#4318FF', boxShadow: '0 4px 12px rgba(67, 24, 255, 0.3)', fontWeight: 700, '&:hover': { backgroundColor: '#3311db' } }}
+                                >
+                                    New Organization
+                                </Button>
                             </Box>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                startIcon={<AddCircleOutlineIcon />}
-                                onClick={() => { setTenantName(''); setOpenAddModal(true); }}
-                                sx={{ borderRadius: '12px', textTransform: 'none', px: 3, py: 1.5, backgroundColor: '#4318FF', boxShadow: '0 4px 12px rgba(67, 24, 255, 0.3)', fontWeight: 700, '&:hover': { backgroundColor: '#3311db' } }}
-                            >
-                                New Organization
-                            </Button>
-                        </Box>
-                        <TableContainer component={Box} sx={{ maxHeight: 600, px: 2 }}>
-                            <Table stickyHeader>
-                                <TableHead>
-                                    <TableRow sx={{ '& th': { backgroundColor: '#fff', fontWeight: 600, color: '#A3AED0', py: 2.5, borderBottom: '1px solid #E2E8F0', fontSize: '0.8rem', letterSpacing: 0.5 } }}>
-                                        <TableCell width="15%">ORGANIZATION</TableCell>
-                                        <TableCell width="30%">TENANT ID</TableCell>
-                                        <TableCell align="center" width="10%">ROBOTS</TableCell>
-                                        <TableCell width="20%">LICENSES</TableCell>
-                                        <TableCell align="right" width="25%">ACTIONS</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {loading ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
-                                                <CircularProgress size={50} thickness={4} sx={{ color: '#4318FF' }} />
-                                            </TableCell>
+                            <TableContainer component={Box} sx={{ maxHeight: 600, px: 2 }}>
+                                <Table stickyHeader>
+                                    <TableHead>
+                                        <TableRow sx={{ '& th': { backgroundColor: '#fff', fontWeight: 600, color: '#A3AED0', py: 2.5, borderBottom: '1px solid #E2E8F0', fontSize: '0.8rem', letterSpacing: 0.5 } }}>
+                                            <TableCell width="15%">ORGANIZATION</TableCell>
+                                            <TableCell width="30%">TENANT ID</TableCell>
+                                            <TableCell align="center" width="10%">ROBOTS</TableCell>
+                                            <TableCell width="20%">LICENSES</TableCell>
+                                            <TableCell align="right" width="25%">ACTIONS</TableCell>
                                         </TableRow>
-                                    ) : tenants.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
-                                                <BlockIcon sx={{ fontSize: 60, color: '#e2e8f0', mb: 2 }} />
-                                                <Typography variant="h6" color="#718096" sx={{ fontWeight: 700}}>Datastore is empty</Typography>
-                                                <Typography variant="body2" color="#a0aec0">Create your first organization to populate this view.</Typography>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        tenants.map(tenant => (
-                                            <TableRow key={tenant.id} hover sx={{ '& td': { borderBottom: '1px solid #F4F7FE', py: 2.5 } }}>
-                                                <TableCell sx={{ fontWeight: 700, color: '#2B3674', fontSize: '0.95rem' }}>{tenant.name}</TableCell>
-                                                <TableCell sx={{ color: '#A3AED0', fontFamily: "'Fira Code', monospace", fontSize: '0.8rem', fontWeight: 500 }}>{tenant.id}</TableCell>
-                                                <TableCell align="center">
-                                                    <Box sx={{ backgroundColor: tenant.robots?.length > 0 ? '#E6F9F5' : '#F4F7FE', color: tenant.robots?.length > 0 ? '#05CD99' : '#A3AED0', display: 'inline-flex', padding: '6px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem' }}>
-                                                        {tenant.robots?.length || 0}
-                                                    </Box>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                                        {tenant.tenantLicenses?.length === 0 ? (
-                                                            <Typography variant="body2" color="#A3AED0" sx={{ fontStyle: 'italic', fontSize: '0.85rem' }}>None Assigned</Typography>
-                                                        ) : (
-                                                            tenant.tenantLicenses?.map((tl: any) => {
-                                                                const expired = isExpired(tl.expirationDate);
-                                                                const style = expired
-                                                                    ? { bg: '#FDECEB', color: '#EE5D50', border: 'rgba(238, 93, 80, 0.4)' }
-                                                                    : getLicenseColor(tl.license.code);
-                                                                return (
-                                                                    <Chip
-                                                                        key={tl.license.code}
-                                                                        label={tl.license.code}
-                                                                        size="small"
-                                                                        sx={{
-                                                                            fontWeight: 700,
-                                                                            fontSize: '0.75rem',
-                                                                            letterSpacing: 0.5,
-                                                                            backgroundColor: style.bg,
-                                                                            color: style.color,
-                                                                            border: `1px solid ${style.border}`,
-                                                                            borderRadius: '6px',
-                                                                            px: 0.5
-                                                                        }}
-                                                                    />
-                                                                );
-                                                            })
-                                                        )}
-                                                    </Box>
-                                                </TableCell>
-                                                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                                                    <Tooltip title="Manage Licenses">
-                                                        <IconButton onClick={() => setOpenLicenseModal({ open: true, tenant })} sx={{ color: '#4318FF', mr: 1, '&:hover': { backgroundColor: '#F4F7FE' } }}>
-                                                            <SettingsIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Edit">
-                                                        <IconButton onClick={() => { setTenantName(tenant.name); setOpenEditModal({ open: true, tenant }); }} sx={{ color: '#A3AED0', mr: 1, '&:hover': { backgroundColor: '#F4F7FE' } }}>
-                                                            <EditIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                    <Tooltip title="Delete">
-                                                        <IconButton onClick={() => handleDeleteTenant(tenant.id, tenant.name)} sx={{ color: '#EE5D50', '&:hover': { backgroundColor: '#FDECEB' } }}>
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                    </TableHead>
+                                    <TableBody>
+                                        {loading ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
+                                                    <CircularProgress size={50} thickness={4} sx={{ color: '#4318FF' }} />
                                                 </TableCell>
                                             </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </Card>
+                                        ) : tenants.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
+                                                    <BlockIcon sx={{ fontSize: 60, color: '#e2e8f0', mb: 2 }} />
+                                                    <Typography variant="h6" color="#718096" sx={{ fontWeight: 700}}>Datastore is empty</Typography>
+                                                    <Typography variant="body2" color="#a0aec0">Create your first organization to populate this view.</Typography>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            tenants.map(tenant => (
+                                                <TableRow key={tenant.id} hover sx={{ '& td': { borderBottom: '1px solid #F4F7FE', py: 2.5 } }}>
+                                                    <TableCell sx={{ fontWeight: 700, color: '#2B3674', fontSize: '0.95rem' }}>{tenant.name}</TableCell>
+                                                    <TableCell sx={{ color: '#A3AED0', fontFamily: "'Fira Code', monospace", fontSize: '0.8rem', fontWeight: 500 }}>{tenant.id}</TableCell>
+                                                    <TableCell align="center">
+                                                        <Box sx={{ backgroundColor: tenant.robots?.length > 0 ? '#E6F9F5' : '#F4F7FE', color: tenant.robots?.length > 0 ? '#05CD99' : '#A3AED0', display: 'inline-flex', padding: '6px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem' }}>
+                                                            {tenant.robots?.length || 0}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                                            {tenant.tenantLicenses?.length === 0 ? (
+                                                                <Typography variant="body2" color="#A3AED0" sx={{ fontStyle: 'italic', fontSize: '0.85rem' }}>None Assigned</Typography>
+                                                            ) : (
+                                                                tenant.tenantLicenses?.map((tl: any) => {
+                                                                    const expired = isExpired(tl.expirationDate);
+                                                                    const style = expired
+                                                                        ? { bg: '#FDECEB', color: '#EE5D50', border: 'rgba(238, 93, 80, 0.4)' }
+                                                                        : getLicenseColor(tl.license.code);
+                                                                    return (
+                                                                        <Chip
+                                                                            key={tl.license.code}
+                                                                            label={tl.license.code}
+                                                                            size="small"
+                                                                            sx={{
+                                                                                fontWeight: 700,
+                                                                                fontSize: '0.75rem',
+                                                                                letterSpacing: 0.5,
+                                                                                backgroundColor: style.bg,
+                                                                                color: style.color,
+                                                                                border: `1px solid ${style.border}`,
+                                                                                borderRadius: '6px',
+                                                                                px: 0.5
+                                                                            }}
+                                                                        />
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                                                        <Tooltip title="Manage Licenses">
+                                                            <IconButton onClick={() => setOpenLicenseModal({ open: true, tenant })} sx={{ color: '#4318FF', mr: 1, '&:hover': { backgroundColor: '#F4F7FE' } }}>
+                                                                <SettingsIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Edit">
+                                                            <IconButton onClick={() => { setTenantName(tenant.name); setOpenEditModal({ open: true, tenant }); }} sx={{ color: '#A3AED0', mr: 1, '&:hover': { backgroundColor: '#F4F7FE' } }}>
+                                                                <EditIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                        <Tooltip title="Delete">
+                                                            <IconButton onClick={() => handleDeleteTenant(tenant.id, tenant.name)} sx={{ color: '#EE5D50', '&:hover': { backgroundColor: '#FDECEB' } }}>
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </Card>
+                    </PermissionGate>
+                )}
+
+                {activeTab === 'Analytics' && (
+                    <PermissionGate allowed={canAccessAnalytics} deniedMessage="You do not have permission to view this page." />
+                )}
+
+                {activeTab === 'Alerts' && (
+                    <PermissionGate allowed={canAccessAlerts} deniedMessage="You do not have permission to view this page." />
+                )}
+
+                {activeTab === 'Settings' && (
+                    <PermissionGate allowed={canAccessSettings} deniedMessage="You do not have permission to view this page." />
                 )}
             </Box>
             {/* Create / Edit / Manage Modals... (Preserved Logic, Polished Looks) */}
