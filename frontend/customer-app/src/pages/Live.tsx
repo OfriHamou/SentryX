@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';      
+import { useLocation } from 'react-router-dom'; 
 import { Box, Paper, Typography } from '@mui/material';
 import VideoPlayer from '../components/live/video/VideoPlayer';
 import ActionPanel from '../components/live/actions/ActionPanel';
@@ -18,7 +19,14 @@ export default function Live() {
     const { data: events, loading: eventsLoading, error: eventsError } = useEvents();
     const [volume, setVolume] = useState(50);
     const fullscreenRef = useRef<HTMLDivElement>(null);
-    const { isFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
+    const { isFullscreen, enterFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
+    const location = useLocation();
+
+    useEffect(() => {
+        if (location.state?.fullscreen) {
+            enterFullscreen();
+        }
+    }, []);
 
     const faceStatus = detection?.camera_opened ? 'active' : 'inactive';
 
