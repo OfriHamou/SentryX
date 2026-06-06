@@ -3,7 +3,8 @@ import AppLayout from '../layouts/AppLayout';
 import Dashboard from '../pages/Dashboard';
 import Live from '../pages/Live';
 import Alerts from '../pages/Alerts';   
-import Control from '../pages/Control';      
+import Control from '../pages/Control';  
+import History from '../pages/History';       
 
 export default function CustomerRoutes() {
   return (
@@ -14,6 +15,7 @@ export default function CustomerRoutes() {
         <Route path="/live" element={<Live />} />
         <Route path="/alerts" element={<Alerts />} />  
         <Route path="/control" element={<Control />} />
+        <Route path="/history" element={<History />} />
       </Route>
     </Routes>
   );
