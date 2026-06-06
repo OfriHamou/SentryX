@@ -17,7 +17,7 @@ export default function RobotConfig({ defaultName }: { defaultName?: string }) {
                 <FormControlLabel
                     control={<Switch checked={autoPatrol} onChange={(e) => setAutoPatrol(e.target.checked)} disabled />}
                     label="Enable Auto Patrol" />
-                <Typography variant="caption" color="text.disabled" display="block">Coming soon — needs patrol engine</Typography>
+                <Typography variant="caption" color="text.disabled" sx={{ display: "block" }}>Coming soon — needs patrol engine</Typography>
             </Box>
         </Paper>
     );

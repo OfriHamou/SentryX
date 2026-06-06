@@ -1,5 +1,6 @@
 import { robotApi } from './client';
 import type { BatteryStatus, DetectionStatus, RobotEvent, MoveInput } from '../types/robot';
+import { customerApi } from './customerApi';
 
 export const videoStreamUrl = () => 
     `${robotApi.defaults.baseURL}/robot/video`;
@@ -52,6 +53,6 @@ export const stopRobot = async () => {
 };
 
 export const getEventHistory = async (): Promise<RobotEvent[]> => {
-    const response = await robotApi.get<{ ok: boolean; events: RobotEvent[] }>('/events');
+    const response = await customerApi.get<{ ok: boolean; events: RobotEvent[] }>('/events');
     return response.data.events ?? [];
 };
