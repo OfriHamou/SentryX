@@ -3,6 +3,8 @@ import { Readable } from "stream";
 import type { ReadableStream as NodeReadableStream } from "stream/web";
 import type { AuthIdentityPayload } from "../auth/types";
 import { logger } from "../utils/logger";
+import { AppDataSource } from "../db";
+import { Robot } from "../models/Robot";
 
 function requireEnvVariable(name: string): string {
     const value = process.env[name];
@@ -281,5 +283,54 @@ export class RobotController {
             "Event image not found",
             "events/image"
         );
+    }
+
+    static async getMyRobot(req: Request, res: Response) {
+        const auth = res.locals.auth as AuthIdentityPayload | undefined;
+        if (!auth?.tenantId) {
+            return res.status(401).json({ ok: false, error: "Unauthenticated" });
+        }
+        try {
+            const robot = await AppDataSource.getRepository(Robot).findOne({
+                where: { tenant: { id: auth.tenantId } },
+                order: { updatedAt: "DESC" },
+            });
+            if (!robot) return res.status(404).json({ ok: false, error: "No robot for tenant" });
+            return res.status(200).json({
+                ok: true,
+                robot: { id: robot.id, name: robot.name, location: robot.location ?? null, status: robot.status },
+            });
+        } catch (error) {
+            console.error("Error fetching current robot:", error);
+            return res.status(500).json({ ok: false, error: "Failed to fetch robot" });
+        }
+    }
+
+    static async updateMyRobot(req: Request, res: Response) {
+        const auth = res.locals.auth as AuthIdentityPayload | undefined;
+        if (!auth?.tenantId) {
+            return res.status(401).json({ ok: false, error: "Unauthenticated" });
+        }
+        try {
+            const repo = AppDataSource.getRepository(Robot);
+            const robot = await repo.findOne({
+                where: { tenant: { id: auth.tenantId } },
+                order: { updatedAt: "DESC" },
+            });
+            if (!robot) return res.status(404).json({ ok: false, error: "No robot for tenant" });
+
+            const { name, location } = req.body ?? {};
+            if (typeof name === "string" && name.trim()) robot.name = name.trim();
+            if (typeof location === "string") robot.location = location.trim();
+            await repo.save(robot);
+
+            return res.status(200).json({
+                ok: true,
+                robot: { id: robot.id, name: robot.name, location: robot.location ?? null, status: robot.status },
+            });
+        } catch (error) {
+            console.error("Error updating robot:", error);
+            return res.status(500).json({ ok: false, error: "Failed to update robot" });
+        }
     }
 }
