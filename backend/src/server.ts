@@ -23,6 +23,7 @@ import robotRoutes from "./routes/robotRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
 import eventRoutes from "./routes/eventRoutes";
+import faceRoutes from "./routes/faceRoutes";
 import { logger } from "./utils/logger";
 
 export const app = express();
@@ -79,6 +80,9 @@ function initializeRoutes(app: express.Application) {
 
     // Mount our Robot routes under /api/robot
     app.use("/api/robot", robotRoutes);
+
+    // Mount our Face routes under /api/faces
+    app.use("/api/faces", faceRoutes);
 
     // serve index.html for all non-API routes (/login, /profile, etc.)
     app.use((req, res) => {
