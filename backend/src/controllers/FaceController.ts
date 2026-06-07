@@ -4,6 +4,7 @@ import fs from "fs";
 import { randomUUID } from "crypto";
 import { AppDataSource } from "../db";
 import { AuthorizedFace } from "../models/AuthorizedFace";
+import { Robot } from "../models/Robot"; 
 import { Tenant } from "../models/Tenant";
 import type { AuthIdentityPayload } from "../auth/types";
 
@@ -177,6 +178,33 @@ export class FaceController {
         } catch (e) {
             console.error("Error serving face image:", e);
             return res.status(500).json({ ok: false, error: "Failed to serve image" });
+        }
+    }
+
+    // GET /api/faces/by-robot/:robotId — robot-facing (no auth, like /report). Returns the robot's tenant's faces.
+    static async getFacesForRobot(req: Request, res: Response) {
+        try {
+            const robot = await AppDataSource.getRepository(Robot).findOne({
+                where: { id: req.params.robotId },
+                relations: ["tenant"],
+            });
+            if (!robot?.tenant) return res.status(404).json({ ok: false, error: "Robot/tenant not found" });
+
+            const faces = await AppDataSource.getRepository(AuthorizedFace).find({
+                where: { tenant: { id: robot.tenant.id } },
+                order: { addedAt: "DESC" },
+            });
+            return res.status(200).json({
+                ok: true,
+                faces: faces.map((f) => ({
+                    id: f.id,
+                    name: f.name,
+                    images: (f.images ?? []).map((fn) => `/api/faces/${f.id}/images/${encodeURIComponent(fn)}`),
+                })),
+            });
+        } catch (e) {
+            console.error("Error fetching faces for robot:", e);
+            return res.status(500).json({ ok: false, error: "Failed" });
         }
     }
 }
