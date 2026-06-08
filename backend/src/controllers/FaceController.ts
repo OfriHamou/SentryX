@@ -9,6 +9,15 @@ import { Tenant } from "../models/Tenant";
 import type { AuthIdentityPayload } from "../auth/types";
 
 const FACES_DIR = process.env.AUTHORIZED_FACES_DIR || path.join(__dirname, "..", "..", "media", "authorized_faces");
+const JETSON_DETECTION_URL = process.env.JETSON_DETECTION_URL;
+
+// fire-and-forget: tell the robot to re-sync now (the poll is the safety net if this fails)
+function notifyRobotFacesChanged() {
+    if (!JETSON_DETECTION_URL) return;
+    try {
+        fetch(`${JETSON_DETECTION_URL}/faces-changed`, { method: "POST" }).catch(() => {});
+    } catch { /* notify must never break the actual operation */ }
+}
 
 function slugify(name: string): string {
     return name.trim().replace(/[\\/:*?"<>|]/g, "").replace(/\.\.+/g, "").replace(/\s+/g, "-").slice(0, 50) || "face";
@@ -86,6 +95,7 @@ export class FaceController {
                 tenant: { id: tenantId } as Tenant,
             });
             await repo.save(face);
+            notifyRobotFacesChanged();
             return res.status(201).json({ ok: true, face: { id, name: face.name, role: face.role ?? null, images: imageFilenames } });
         } catch (e) {
             console.error("Error creating face:", e);
@@ -99,6 +109,7 @@ export class FaceController {
         try {
             fs.rmSync(path.join(FACES_DIR, folderName(face)), { recursive: true, force: true });
             await AppDataSource.getRepository(AuthorizedFace).remove(face);
+            notifyRobotFacesChanged();
             return res.status(200).json({ ok: true });
         } catch (e) {
             console.error("Error deleting face:", e);
@@ -119,6 +130,7 @@ export class FaceController {
             }
             if (typeof role === "string") face.role = role.trim();
             await AppDataSource.getRepository(AuthorizedFace).save(face);
+            notifyRobotFacesChanged();
             return res.status(200).json({ ok: true, face: { id: face.id, name: face.name, role: face.role ?? null } });
         } catch (e) {
             console.error("Error updating face:", e);
@@ -143,6 +155,7 @@ export class FaceController {
             });
             face.images = [...(face.images ?? []), ...added];
             await AppDataSource.getRepository(AuthorizedFace).save(face);
+            notifyRobotFacesChanged();
             return res.status(200).json({ ok: true, images: face.images });
         } catch (e) {
             console.error("Error adding images:", e);
@@ -159,6 +172,7 @@ export class FaceController {
             if (fs.existsSync(filePath)) fs.rmSync(filePath, { force: true });
             face.images = (face.images ?? []).filter((f) => f !== filename);
             await AppDataSource.getRepository(AuthorizedFace).save(face);
+            notifyRobotFacesChanged();
             return res.status(200).json({ ok: true, images: face.images });
         } catch (e) {
             console.error("Error removing image:", e);

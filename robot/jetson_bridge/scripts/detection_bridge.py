@@ -32,7 +32,6 @@ latest_event = None
 last_event_ts = 0
 state_lock = threading.Lock()
 
-
 def save_event(frame, detections):
     global latest_event, last_event_ts
 
@@ -91,7 +90,6 @@ def save_event(frame, detections):
     latest_event = event
     return event
 
-
 def list_events():
     events = []
 
@@ -108,7 +106,6 @@ def list_events():
             continue
 
     return events
-
 
 def detection_loop():
     global latest_event
@@ -167,7 +164,6 @@ def detection_loop():
 
         time.sleep(0.1)
 
-
 @app.route("/health", methods=["GET"])
 def health():
     with state_lock:
@@ -178,12 +174,10 @@ def health():
             "last_event_id": latest_status["last_event_id"]
         })
 
-
 @app.route("/status", methods=["GET"])
 def status():
     with state_lock:
         return jsonify(latest_status)
-
 
 @app.route("/latest_event", methods=["GET"])
 def get_latest_event():
@@ -196,16 +190,19 @@ def get_latest_event():
 
     return jsonify({"ok": True, "event": None})
 
-
 @app.route("/events", methods=["GET"])
 def get_events():
     return jsonify({"ok": True, "events": list_events()})
-
 
 @app.route("/image/<filename>", methods=["GET"])
 def get_image(filename):
     return send_from_directory(EVENTS_DIR, filename)
 
+@app.route("/faces-changed", methods=["POST"])
+def faces_changed():
+    if detector.sync_from_server():
+        detector.load_from_db()
+    return jsonify({"ok": True})
 
 if __name__ == "__main__":
     worker = threading.Thread(target=detection_loop, daemon=True)
