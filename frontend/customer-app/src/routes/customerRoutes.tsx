@@ -4,7 +4,8 @@ import Dashboard from '../pages/Dashboard';
 import Live from '../pages/Live';
 import Alerts from '../pages/Alerts';   
 import Control from '../pages/Control';  
-import History from '../pages/History';       
+import History from '../pages/History';    
+import Settings from '../pages/Settings';      
 
 export default function CustomerRoutes() {
   return (
@@ -16,6 +17,7 @@ export default function CustomerRoutes() {
         <Route path="/alerts" element={<Alerts />} />  
         <Route path="/control" element={<Control />} />
         <Route path="/history" element={<History />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>
   );
