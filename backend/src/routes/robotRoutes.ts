@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { RobotController } from "../controllers/RobotController";
+import { isLoggedIn } from "../middleware/auth";  
 
 const router = Router();
 
@@ -15,6 +16,8 @@ router.get("/video", RobotController.getVideoStream);
 // Detection service
 router.get("/detection/health", RobotController.getDetectionHealth);
 router.get("/detection/status", RobotController.getDetectionStatus);
+router.get("/current", isLoggedIn, RobotController.getMyRobot); 
+router.put("/current", isLoggedIn, RobotController.updateMyRobot);
 
 // Detection events
 router.get("/events",                 RobotController.getEvents);

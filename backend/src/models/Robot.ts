@@ -18,6 +18,9 @@ export class Robot {
     @Column({ type: "varchar", length: 100 })
     name: string;
 
+    @Column({ type: "varchar", length: 255, nullable: true })
+    location: string;
+
     @Column({ name: "robot_url", type: "varchar", length: 1024, nullable: true })
     robotUrl: string;
 

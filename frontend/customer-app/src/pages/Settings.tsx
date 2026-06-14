@@ -4,14 +4,12 @@ import RobotConfig from '../components/settings/RobotConfig';
 import PatrolSchedule from '../components/settings/PatrolSchedule';
 import NotificationsSettings from '../components/settings/NotificationsSettings';
 import AuthorizedFaces from '../components/settings/AuthorizedFaces';
-import { useRobot } from '../hooks/robot/useRobot';
 
 export default function Settings() {
-    const { data: robot } = useRobot();
     return (
         <Box>
             <Typography variant="h5" sx={{ fontWeight: 800, mb: 3 }}>Settings</Typography>
-            <RobotConfig defaultName={robot?.name} />
+            <RobotConfig />
             <PatrolSchedule />
             <NotificationsSettings />
             <AuthorizedFaces />

@@ -1,16 +1,16 @@
-// TODO: replace mock with real API call once backend exposes GET /api/robots/current
+import { customerApi } from '../../api/customerApi';
+import { usePolling } from '../usePolling';
+
 export interface Robot {
     id: string;
     name: string;
-    location: string;
+    location: string | null;
+    status?: string;
 }
 
-export function useRobot(): { data: Robot | null; loading: boolean } {
-    const mock: Robot = {
-        id: 'mock-robot-1',
-        name: 'Lobby Guard',
-        location: 'Hallway A',
-    };
-
-    return { data: mock, loading: false };
+export function useRobot() {
+    return usePolling(async () => {
+        const res = await customerApi.get<{ ok: boolean; robot: Robot }>('/robot/current');
+        return res.data.robot;
+    }, 30_000);
 }
