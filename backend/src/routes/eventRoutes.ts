@@ -17,7 +17,12 @@ const redisHost = process.env.redis_url || "localhost";
 const redisConnection = new Redis(redisPort, redisHost, {
     maxRetriesPerRequest: null,
 });
-const eventQueue = new Queue("event-processing", { connection: redisConnection });
+const eventQueue = new Queue("event-processing", {
+    connection: {
+        host: redisHost,
+        port: redisPort,
+    },
+});
 
 // Setup Postgres Pool
 const pool = new Pool({
@@ -48,10 +53,20 @@ router.post("/report", upload.single("frame"), async (req, res) => {
     try {
         const { robot_id, event_type, metadata } = req.body;
         const file = req.file;
+        let parsedMetadata: Record<string, unknown> = {};
 
         if (!file || !robot_id || !event_type) {
             if (file) fs.unlinkSync(file.path); // Cleanup temp file
             return res.status(400).json({ error: "Missing required fields (frame, robot_id, event_type)" });
+        }
+
+        if (metadata) {
+            try {
+                parsedMetadata = JSON.parse(metadata);
+            } catch {
+                fs.unlinkSync(file.path);
+                return res.status(400).json({ error: "metadata must be valid JSON" });
+            }
         }
 
         const baseLocation = process.env.frames_to_process_save_location ||  "/tmp/sentryx/media/events/";
@@ -69,26 +84,22 @@ router.post("/report", upload.single("frame"), async (req, res) => {
         // Move the file to its final destination
         fs.renameSync(file.path, finalPath);
 
-        // Extract relative image path based on the base location
-        const imagePath = path.relative(baseLocation, finalPath);
-
          // look up the robot's tenant so the event is tenant-scoped
         const robotResult = await pool.query('SELECT tenant_id FROM robots WHERE id = $1', [robot_id]);
         const tenantId = robotResult.rows[0]?.tenant_id ?? null;
 
         // Insert into Postgres
         const insertQuery = `
-            INSERT INTO events (id, tenant_id, robot_id, event_type, image_path, status) 
-            VALUES ($1, $2, $3, $4, $5, 'PENDING')
+            INSERT INTO events (id, tenant_id, robot_id, event_type, image_path, ai_metadata, status) 
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'PENDING')
         `;
-        await pool.query(insertQuery, [eventId, tenantId, robot_id, event_type, imagePath]);
+        await pool.query(insertQuery, [eventId, tenantId, robot_id, event_type, finalPath, JSON.stringify(parsedMetadata)]);
 
         // Add to BullMQ
             await eventQueue.add("process-frame", {
                 eventId,
-                imagePath,
                 event_type,
-                metadata: metadata ? JSON.parse(metadata) : {}
+                metadata: parsedMetadata
             });
 
         // Return 201 Created immediately
@@ -104,6 +115,7 @@ router.post("/report", upload.single("frame"), async (req, res) => {
 });
 
 router.get("/", isLoggedIn, EventController.getEvents);   
+router.get("/image/:id", isLoggedIn, EventController.getEventImage);
 
 export default router;
 

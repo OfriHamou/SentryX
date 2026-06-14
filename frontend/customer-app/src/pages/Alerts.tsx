@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Box, Paper, Typography, Stack, Button, Select, MenuItem, TextField, FormControl } from '@mui/material';
 import AlertCard from '../components/alerts/AlertCard';
+import EventDetailsDialog from '../components/alerts/EventDetailsDialog';
 import { useEvents } from '../hooks/robot/useEvents';
 import { useRobot } from '../hooks/robot/useRobot';
+import type { RobotEvent } from '../types/robot';
 
 type StatusFilter = 'all' | 'active' | 'resolved';
 type TimeRange = '24h' | 'week' | 'month' | 'custom';
@@ -22,6 +24,7 @@ export default function Alerts() {
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
+    const [selectedEvent, setSelectedEvent] = useState<RobotEvent | null>(null);
 
     const location = robot?.location ?? '—';
     const isResolved = (id: string) => resolvedIds.has(id);
@@ -108,10 +111,17 @@ export default function Alerts() {
                 <Stack spacing={2}>
                     {visible.map((e) => (
                         <AlertCard key={e.id} event={e} location={location}
-                            resolved={isResolved(e.id)} onResolve={() => markResolved(e.id)} />
+                            resolved={isResolved(e.id)} onResolve={() => markResolved(e.id)} onViewDetails={() => setSelectedEvent(e)} />
                     ))}
                 </Stack>
             )}
+
+            <EventDetailsDialog
+                event={selectedEvent}
+                open={selectedEvent !== null}
+                location={location}
+                onClose={() => setSelectedEvent(null)}
+            />
         </Box>
     );
 }

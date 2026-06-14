@@ -5,8 +5,13 @@ import { customerApi } from './customerApi';
 export const videoStreamUrl = () => 
     `${robotApi.defaults.baseURL}/robot/video`;
 
-export const eventImageUrl = (filename: string) =>
-    `${robotApi.defaults.baseURL}/robot/events/image/${encodeURIComponent(filename)}`;
+export const fetchEventImageObjectUrl = async (eventId: string): Promise<string> => {
+    const response = await customerApi.get<Blob>(`/events/image/${encodeURIComponent(eventId)}`, {
+        responseType: 'blob',
+    });
+
+    return URL.createObjectURL(response.data);
+};
 
 export const getBattery = async (): Promise<BatteryStatus> => {
     const response = await robotApi.get<BatteryStatus>('/robot/battery');

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify
 import cv2
 import os
 import json
 import time
 from datetime import datetime, timezone
 import threading
+import requests
 
 from jetson_bridge.detectors.face_detector import FaceDetector
 
 app = Flask(__name__)
 
-EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
 STREAM_URL = "http://127.0.0.1:5001/video_feed"
-
-os.makedirs(EVENTS_DIR, exist_ok=True)
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:4000").rstrip("/")
+ROBOT_ID = os.environ.get("ROBOT_ID", "")
 
 detector = FaceDetector()
 
@@ -32,25 +32,11 @@ latest_event = None
 last_event_ts = 0
 state_lock = threading.Lock()
 
-def save_event(frame, detections):
-    global latest_event, last_event_ts
-
-    now = time.time()
-    if now - last_event_ts < COOLDOWN_SECONDS:
-        return None
-
-    ts = datetime.now(timezone.utc)
-    event_id = ts.strftime("%Y-%m-%dT%H-%M-%SZ")
-
+def build_event_type(detections):
     any_known = any(det["is_known"] for det in detections)
-    event_type = "face_recognized" if any_known else "face_detected_unknown"
+    return "face_recognized" if any_known else "face_detected_unknown"
 
-    image_filename = "{}.jpg".format(event_id)
-    json_filename = "{}.json".format(event_id)
-
-    image_path = os.path.join(EVENTS_DIR, image_filename)
-    json_path = os.path.join(EVENTS_DIR, json_filename)
-
+def annotate_frame(frame, detections):
     annotated = frame.copy()
 
     for det in detections:
@@ -71,44 +57,51 @@ def save_event(frame, detections):
             2
         )
 
-    cv2.imwrite(image_path, annotated)
+    return annotated
 
-    event = {
-        "id": event_id,
+def report_event(frame, detections):
+    if not ROBOT_ID:
+        raise RuntimeError("ROBOT_ID environment variable is required for event uploads")
+
+    event_type = build_event_type(detections)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    annotated = annotate_frame(frame, detections)
+
+    ok, encoded = cv2.imencode(".jpg", annotated)
+    if not ok:
+        raise RuntimeError("Failed to encode event frame as JPEG")
+
+    metadata = {
+        "timestamp": timestamp,
+        "detections": detections,
+        "source": "SentryX_Smart_Vision",
+        "is_alert": event_type != "face_recognized",
+    }
+
+    response = requests.post(
+        "{}/api/events/report".format(BACKEND_URL),
+        files={"frame": ("event.jpg", encoded.tobytes(), "image/jpeg")},
+        data={
+            "robot_id": ROBOT_ID,
+            "event_type": event_type,
+            "metadata": json.dumps(metadata),
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+    body = response.json()
+
+    return {
+        "id": body.get("eventId"),
         "type": event_type,
-        "is_alert": not any_known,
-        "timestamp": ts.isoformat(),
-        "image_filename": image_filename,
+        "is_alert": metadata["is_alert"],
+        "timestamp": timestamp,
         "detections": detections,
         "source": "SentryX_Smart_Vision"
     }
 
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(event, f, indent=2)
-
-    last_event_ts = now
-    latest_event = event
-    return event
-
-def list_events():
-    events = []
-
-    for name in sorted(os.listdir(EVENTS_DIR), reverse=True):
-        if not name.endswith(".json"):
-            continue
-
-        path = os.path.join(EVENTS_DIR, name)
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                events.append(json.load(f))
-        except Exception:
-            continue
-
-    return events
-
 def detection_loop():
-    global latest_event
+    global latest_event, last_event_ts
 
     cap = None
 
@@ -155,12 +148,16 @@ def detection_loop():
                 latest_status["last_detection_time"] = datetime.now(timezone.utc).isoformat()
 
         if detections:
-            event = save_event(frame, detections)
-
-            if event is not None:
-                with state_lock:
-                    latest_event = event
-                    latest_status["last_event_id"] = event["id"]
+            now = time.time()
+            if now - last_event_ts >= COOLDOWN_SECONDS:
+                try:
+                    event = report_event(frame, detections)
+                    last_event_ts = now
+                    with state_lock:
+                        latest_event = event
+                        latest_status["last_event_id"] = event["id"]
+                except Exception as error:
+                    print("Failed to report event to backend: {}".format(error))
 
         time.sleep(0.1)
 
@@ -184,19 +181,13 @@ def get_latest_event():
     if latest_event is not None:
         return jsonify({"ok": True, "event": latest_event})
 
-    events = list_events()
-    if events:
-        return jsonify({"ok": True, "event": events[0]})
-
     return jsonify({"ok": True, "event": None})
 
 @app.route("/events", methods=["GET"])
 def get_events():
-    return jsonify({"ok": True, "events": list_events()})
-
-@app.route("/image/<filename>", methods=["GET"])
-def get_image(filename):
-    return send_from_directory(EVENTS_DIR, filename)
+    if latest_event is None:
+        return jsonify({"ok": True, "events": []})
+    return jsonify({"ok": True, "events": [latest_event]})
 
 @app.route("/faces-changed", methods=["POST"])
 def faces_changed():

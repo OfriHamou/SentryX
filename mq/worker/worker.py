@@ -131,7 +131,7 @@ def process_job(job_id: str):
                 cursor.execute(
                     """
                     UPDATE events 
-                    SET status = %s, ai_metadata = %s 
+                    SET status = %s, ai_metadata = COALESCE(ai_metadata, '{}'::jsonb) || %s::jsonb 
                     WHERE id = %s
                     """,
                     ("COMPLETED", json.dumps(metadata), event_id),

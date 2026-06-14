@@ -1,9 +1,8 @@
-import { getEvents } from '../../api/robot';
+import { getEventHistory } from '../../api/robot';
 import { usePolling } from '../usePolling';
 
 export function useEvents() {
     return usePolling(async () => {
-        const res = await getEvents();
-        return res.events ?? [];
+        return await getEventHistory();
     }, 5_000);
 }
