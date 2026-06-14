@@ -6,6 +6,7 @@ import { useCustomerAuth } from '../auth/CustomerAuthProvider';
 const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
     { label: 'Live', path: '/live' },
+    { label: 'Alerts', path: '/alerts' }, 
 ];
 
 export default function AppLayout() {
