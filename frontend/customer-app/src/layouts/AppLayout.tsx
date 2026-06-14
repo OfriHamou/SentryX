@@ -7,6 +7,7 @@ const navItems = [
     { label: 'Dashboard', path: '/dashboard' },
     { label: 'Live', path: '/live' },
     { label: 'Alerts', path: '/alerts' }, 
+    { label: 'Control', path: '/control' },
 ];
 
 export default function AppLayout() {
