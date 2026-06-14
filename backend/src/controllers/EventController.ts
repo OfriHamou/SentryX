@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../db";
 import { Event } from "../models/Event";
+import type { AuthIdentityPayload } from "../auth/types";
 
 // DB row -> RobotEvent shape (what the frontend already expects)
 function toRobotEvent(event: Event) {
@@ -20,13 +21,22 @@ function toRobotEvent(event: Event) {
 
 export class EventController {
     static async getEvents(req: Request, res: Response): Promise<void> {
-        try {
-            const repo = AppDataSource.getRepository(Event); 
-            const events = await repo.find({ order: { createdAt: "DESC" }, take: 200 });
-            res.status(200).json({ ok: true, events: events.map(toRobotEvent) });
-        } catch (error) {
-            console.error("Error fetching events:", error);
-            res.status(500).json({ ok: false, error: "Failed to fetch events" });
+    try {
+        const auth = res.locals.auth as AuthIdentityPayload | undefined;
+        if (!auth?.tenantId) {
+            res.status(401).json({ ok: false, error: "Unauthenticated" });
+            return;
         }
+        const repo = AppDataSource.getRepository(Event);
+        const events = await repo.find({
+            where: { tenant: { id: auth.tenantId } },
+            order: { createdAt: "DESC" },
+            take: 200,
+        });
+        res.status(200).json({ ok: true, events: events.map(toRobotEvent) });
+    } catch (error) {
+        console.error("Error fetching events:", error);
+        res.status(500).json({ ok: false, error: "Failed to fetch events" });
     }
+}
 }

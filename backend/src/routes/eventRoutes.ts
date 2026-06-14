@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
 import { EventController } from "../controllers/EventController"; 
+import { isLoggedIn } from "../middleware/auth";
 
 const router = Router();
 
@@ -71,12 +72,16 @@ router.post("/report", upload.single("frame"), async (req, res) => {
         // Extract relative image path based on the base location
         const imagePath = path.relative(baseLocation, finalPath);
 
+         // look up the robot's tenant so the event is tenant-scoped
+        const robotResult = await pool.query('SELECT tenant_id FROM robots WHERE id = $1', [robot_id]);
+        const tenantId = robotResult.rows[0]?.tenant_id ?? null;
+
         // Insert into Postgres
         const insertQuery = `
-            INSERT INTO events (id, robot_id, event_type, image_path, status) 
-            VALUES ($1, $2, $3, $4, 'PENDING')
+            INSERT INTO events (id, tenant_id, robot_id, event_type, image_path, status) 
+            VALUES ($1, $2, $3, $4, $5, 'PENDING')
         `;
-        await pool.query(insertQuery, [eventId, robot_id, event_type, imagePath]);
+        await pool.query(insertQuery, [eventId, tenantId, robot_id, event_type, imagePath]);
 
         // Add to BullMQ
             await eventQueue.add("process-frame", {
@@ -98,7 +103,7 @@ router.post("/report", upload.single("frame"), async (req, res) => {
     }
 });
 
-router.get("/", EventController.getEvents);   
+router.get("/", isLoggedIn, EventController.getEvents);   
 
 export default router;
 
