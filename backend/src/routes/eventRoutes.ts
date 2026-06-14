@@ -6,6 +6,7 @@ import { Pool } from "pg";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
+import { EventController } from "../controllers/EventController"; 
 
 const router = Router();
 
@@ -96,6 +97,8 @@ router.post("/report", upload.single("frame"), async (req, res) => {
         return res.status(500).json({ error: "Internal server error" });
     }
 });
+
+router.get("/", EventController.getEvents);   
 
 export default router;
 

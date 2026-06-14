@@ -2,12 +2,14 @@ import { AppBar, Toolbar, Box, Button, Container, Typography } from '@mui/materi
 import { NavLink, Outlet } from 'react-router-dom';
 import logoImg from '../assets/LOGO.png';
 import { useCustomerAuth } from '../auth/CustomerAuthProvider';
+import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon } from '@mui/icons-material';
 
 const navItems = [
-    { label: 'Dashboard', path: '/dashboard' },
-    { label: 'Live', path: '/live' },
-    { label: 'Alerts', path: '/alerts' }, 
-    { label: 'Control', path: '/control' },
+    { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
+    { label: 'Live', path: '/live', icon: <LiveIcon /> },
+    { label: 'Alerts', path: '/alerts', icon: <AlertsIcon /> },
+    { label: 'Control', path: '/control', icon: <ControlIcon /> },
+    { label: 'History', path: '/history', icon: <HistoryIcon /> },
 ];
 
 export default function AppLayout() {
@@ -28,6 +30,7 @@ export default function AppLayout() {
                             key={item.path}
                             component={NavLink}
                             to={item.path}
+                            startIcon={item.icon}
                             sx={{
                                 color: 'rgba(255, 255, 255, 0.7)',
                                 textTransform: 'none',

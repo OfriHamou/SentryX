@@ -50,3 +50,8 @@ export const stopRobot = async () => {
     const response = await robotApi.post('/robot/stop');
     return response.data;
 };
+
+export const getEventHistory = async (): Promise<RobotEvent[]> => {
+    const response = await robotApi.get<{ ok: boolean; events: RobotEvent[] }>('/events');
+    return response.data.events ?? [];
+};

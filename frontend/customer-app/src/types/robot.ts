@@ -38,6 +38,7 @@ export interface RobotEvent {
     image_filename?: string;
     detections?: Detection[];
     source?: string;
+    status?: string;
 }
 
 export interface MoveInput {
