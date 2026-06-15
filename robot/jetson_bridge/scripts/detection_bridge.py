@@ -4,6 +4,9 @@ import cv2
 import os
 import json
 import time
+import urllib.request
+import urllib.error
+import uuid
 from datetime import datetime, timezone
 import threading
 
@@ -14,6 +17,8 @@ app = Flask(__name__)
 EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
 STREAM_URL = "http://127.0.0.1:5001/video_feed"
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:4000").rstrip("/")
+ROBOT_ID = os.environ.get("ROBOT_ID", "be0ca78d-eff9-422b-8e07-7fdb50835185")
 
 os.makedirs(EVENTS_DIR, exist_ok=True)
 
@@ -25,6 +30,8 @@ latest_status = {
     "faces_detected": 0,
     "detections": [],
     "last_event_id": None,
+    "last_event_source": None,
+    "last_report_error": None,
     "last_detection_time": None,
 }
 
@@ -32,24 +39,12 @@ latest_event = None
 last_event_ts = 0
 state_lock = threading.Lock()
 
-def save_event(frame, detections):
-    global latest_event, last_event_ts
-
-    now = time.time()
-    if now - last_event_ts < COOLDOWN_SECONDS:
-        return None
-
+def build_annotated_frame(frame, detections):
     ts = datetime.now(timezone.utc)
     event_id = ts.strftime("%Y-%m-%dT%H-%M-%SZ")
 
     any_known = any(det["is_known"] for det in detections)
     event_type = "face_recognized" if any_known else "face_detected_unknown"
-
-    image_filename = "{}.jpg".format(event_id)
-    json_filename = "{}.json".format(event_id)
-
-    image_path = os.path.join(EVENTS_DIR, image_filename)
-    json_path = os.path.join(EVENTS_DIR, json_filename)
 
     annotated = frame.copy()
 
@@ -71,20 +66,146 @@ def save_event(frame, detections):
             2
         )
 
-    cv2.imwrite(image_path, annotated)
+    metadata = {
+        "detections": detections,
+        "is_alert": not any_known,
+        "source": "SentryX_Smart_Vision",
+        "reported_at": ts.isoformat()
+    }
+
+    return {
+        "local_id": event_id,
+        "event_type": event_type,
+        "metadata": metadata,
+        "annotated": annotated,
+        "timestamp": ts.isoformat(),
+    }
+
+def _encode_multipart_formdata(fields, files):
+    boundary = "----SentryXBoundary{}".format(uuid.uuid4().hex)
+    chunks = []
+
+    for key, value in fields.items():
+        chunks.append("--{}".format(boundary).encode("utf-8"))
+        chunks.append('Content-Disposition: form-data; name="{}"'.format(key).encode("utf-8"))
+        chunks.append(b"")
+        chunks.append(str(value).encode("utf-8"))
+
+    for file_field, filename, content_type, content in files:
+        chunks.append("--{}".format(boundary).encode("utf-8"))
+        chunks.append(
+            'Content-Disposition: form-data; name="{}"; filename="{}"'.format(file_field, filename).encode("utf-8")
+        )
+        chunks.append("Content-Type: {}".format(content_type).encode("utf-8"))
+        chunks.append(b"")
+        chunks.append(content)
+
+    chunks.append("--{}--".format(boundary).encode("utf-8"))
+    chunks.append(b"")
+    body = b"\r\n".join(chunks)
+    content_type = "multipart/form-data; boundary={}".format(boundary)
+    return body, content_type
+
+def report_event_to_backend(event_payload):
+    if not ROBOT_ID:
+        return None, "ROBOT_ID is empty"
+
+    ok, encoded = cv2.imencode(".jpg", event_payload["annotated"])
+    if not ok:
+        return None, "Failed to encode frame"
+
+    fields = {
+        "robot_id": ROBOT_ID,
+        "event_type": event_payload["event_type"],
+        "metadata": json.dumps(event_payload["metadata"]),
+    }
+    files = [
+        (
+            "frame",
+            "{}.jpg".format(event_payload["local_id"]),
+            "image/jpeg",
+            encoded.tobytes(),
+        )
+    ]
+
+    body, content_type = _encode_multipart_formdata(fields, files)
+    request = urllib.request.Request(
+        "{}/api/events/report".format(BACKEND_URL),
+        data=body,
+        method="POST",
+        headers={"Content-Type": content_type, "Content-Length": str(len(body))},
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            response_body = response.read().decode("utf-8")
+            parsed = json.loads(response_body) if response_body else {}
+            remote_event_id = parsed.get("eventId")
+            event = {
+                "id": remote_event_id or event_payload["local_id"],
+                "type": event_payload["event_type"],
+                "is_alert": event_payload["metadata"]["is_alert"],
+                "timestamp": event_payload["timestamp"],
+                "image_filename": None,
+                "detections": event_payload["metadata"]["detections"],
+                "source": "SentryX_Backend_Queue",
+                "report_status": "api_accepted",
+            }
+            return event, None
+    except urllib.error.HTTPError as error:
+        try:
+            body = error.read().decode("utf-8")
+        except Exception:
+            body = ""
+        return None, "HTTP {} {} {}".format(error.code, error.reason, body)
+    except Exception as error:
+        return None, str(error)
+
+def save_event_locally(event_payload):
+    image_filename = "{}.jpg".format(event_payload["local_id"])
+    json_filename = "{}.json".format(event_payload["local_id"])
+
+    image_path = os.path.join(EVENTS_DIR, image_filename)
+    json_path = os.path.join(EVENTS_DIR, json_filename)
+
+    cv2.imwrite(image_path, event_payload["annotated"])
 
     event = {
-        "id": event_id,
-        "type": event_type,
-        "is_alert": not any_known,
-        "timestamp": ts.isoformat(),
+        "id": event_payload["local_id"],
+        "type": event_payload["event_type"],
+        "is_alert": event_payload["metadata"]["is_alert"],
+        "timestamp": event_payload["timestamp"],
         "image_filename": image_filename,
-        "detections": detections,
-        "source": "SentryX_Smart_Vision"
+        "detections": event_payload["metadata"]["detections"],
+        "source": "SentryX_Smart_Vision",
+        "report_status": "local_fallback"
     }
 
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(event, f, indent=2)
+
+    return event
+
+def save_event(frame, detections):
+    global latest_event, last_event_ts
+
+    now = time.time()
+    if now - last_event_ts < COOLDOWN_SECONDS:
+        return None
+
+    event_payload = build_annotated_frame(frame, detections)
+    reported_event, report_error = report_event_to_backend(event_payload)
+
+    if reported_event is None:
+        event = save_event_locally(event_payload)
+        with state_lock:
+            latest_status["last_report_error"] = report_error
+            latest_status["last_event_source"] = "local"
+    else:
+        event = reported_event
+        with state_lock:
+            latest_status["last_report_error"] = None
+            latest_status["last_event_source"] = "backend"
 
     last_event_ts = now
     latest_event = event
