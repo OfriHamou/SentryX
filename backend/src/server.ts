@@ -34,6 +34,7 @@ function prerequisites() {
         process.env.CLIENT_ORIGIN || "http://localhost:3000",
         "http://localhost:4000",  // Local server
         "http://localhost:5173",  // Local FE
+        "https://sentryx.cs.colman.ac.il", // Production FE
     ].filter(Boolean) as string[];
 
     app.use(cors({
