@@ -12,13 +12,31 @@ import { isLoggedIn } from "../middleware/auth";
 const router = Router();
 
 // Setup Redis & BullMQ
-const redisPort = parseInt(process.env.redis_port || "6379", 10);
-const redisHost = process.env.redis_url || "localhost";
+const redisPort = parseInt(process.env.REDIS_PORT || "6379", 10);
+const redisHost = process.env.REDIS_URL || "localhost";
+const redisPassword = process.env.REDIS_PASSWORD || undefined;
+
 const redisConnection = new Redis(redisPort, redisHost, {
     maxRetriesPerRequest: null,
+    password: redisPassword,
+    retryStrategy(times) {
+        if (times > 3) {
+            console.error("Redis connection failed after 3 retries. Disabling app features or stopping...");
+            process.exit(1);
+        }
+        return Math.min(times * 50, 2000);
+    }
 });
+
+redisConnection.on("error", (error) => {
+    console.error("Redis background connection error:", error.message);
+});
+
 const eventQueue = new Queue("event-processing", { connection: redisConnection });
 
+eventQueue.on("error", (error) => {
+    console.error("BullMQ Queue background error:", error.message);
+});
 // Setup Postgres Pool
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD ? encodeURIComponent(process.env.DB_PASSWORD) : ""}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`
