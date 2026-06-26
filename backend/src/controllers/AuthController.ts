@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { QueryFailedError } from "typeorm";
 import { AppDataSource } from "../db";
-import { User } from "../models/User";
+import { User, UserStatus } from "../models/User";
 import { Tenant } from "../models/Tenant";
 import { Role } from "../models/Role";
 import { signAccessToken } from "../auth/services/token";
@@ -11,16 +11,9 @@ import {
     revokeRefreshTokenSession,
     validateRefreshTokenSession
 } from "../auth/services/refreshTokenService";
-import type { AuthIdentityPayload } from "../auth/types";
+import type { AuthIdentityPayload, RegistrationRequestDTO } from "../auth/types";
+import { EmailService } from "../services/EmailService";
 import { logger } from "../utils/logger";
-
-interface RegisterRequestBody {
-    email?: string;
-    password?: string;
-    fullName?: string;
-    tenantId?: string;
-    roleId?: number | string;
-}
 
 interface LoginRequestBody {
     email?: string;
@@ -43,6 +36,7 @@ function sanitizeUser(user: User) {
         tenantId: user.tenant?.id,
         roleId: user.role?.id,
         roleName: user.role?.roleName,
+        status: user.status,
         createdAt: user.createdAt,
         allowedPages: user.role?.allowedPages ?? {},
     };
@@ -91,34 +85,34 @@ function buildAuthMeta(
 export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
-            const { email, password, fullName, tenantId, roleId } = req.body as RegisterRequestBody;
+            const { tenantInviteCode, email, password, fullName, phone, jobTitle } = req.body as RegistrationRequestDTO;
 
+            // Validate email
             if (!email || !isValidEmail(email)) {
                 res.status(400).json({ message: "A valid email is required" });
                 return;
             }
 
+            // Validate password
             if (!password) {
                 res.status(400).json({ message: "Password is required" });
                 return;
             }
 
-            if (!tenantId) {
-                res.status(400).json({ message: "tenantId is required" });
-                return;
-            }
-
-            const numericRoleId = Number(roleId);
-            if (!roleId || Number.isNaN(numericRoleId)) {
-                res.status(400).json({ message: "roleId is required and must be numeric" });
+            // Validate tenant invite code
+            if (!tenantInviteCode) {
+                res.status(400).json({ message: "Organization ID / Invite Code is required" });
                 return;
             }
 
             const normalizedEmail = email.trim().toLowerCase();
+            const normalizedInviteCode = tenantInviteCode.trim().toUpperCase();
+
             const userRepo = AppDataSource.getRepository(User);
             const tenantRepo = AppDataSource.getRepository(Tenant);
             const roleRepo = AppDataSource.getRepository(Role);
 
+            // Check if email already registered
             const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
             if (existingUser) {
                 logger.warn("Register failed", buildAuthMeta(req, {
@@ -134,7 +128,8 @@ export class AuthController {
                 return;
             }
 
-            const tenant = await tenantRepo.findOneBy({ id: tenantId });
+            // Find tenant by invite code
+            const tenant = await tenantRepo.findOneBy({ inviteCode: normalizedInviteCode });
             if (!tenant) {
                 logger.warn("Register failed", buildAuthMeta(req, {
                     category: "AUTH",
@@ -142,40 +137,56 @@ export class AuthController {
                     status: "FAILED",
                     metadata: {
                         email: normalizedEmail,
-                        tenantId,
+                        inviteCode: normalizedInviteCode,
                         reason: "TENANT_NOT_FOUND"
                     }
                 }));
-                res.status(404).json({ message: "Tenant not found" });
+                res.status(404).json({ message: "Organization ID / Invite Code is invalid" });
                 return;
             }
 
-            const role = await roleRepo.findOneBy({ id: numericRoleId });
-            if (!role) {
-                logger.warn("Register failed", buildAuthMeta(req, {
+            // Find ORG_ADMIN role (case-insensitive search)
+            const orgAdminRole = await roleRepo.createQueryBuilder("role")
+                .where("LOWER(role.role_name) = LOWER(:roleName)", { roleName: "ORG_ADMIN" })
+                .orWhere("LOWER(role.role_name) = LOWER(:roleName)", { roleName: "TENANT_ADMIN" })
+                .getOne();
+
+            if (!orgAdminRole) {
+                logger.error("Register failed", undefined, buildAuthMeta(req, {
                     category: "AUTH",
                     action: "REGISTER_FAILED",
                     status: "FAILED",
                     metadata: {
                         email: normalizedEmail,
-                        roleId: numericRoleId,
-                        reason: "ROLE_NOT_FOUND"
+                        reason: "ORG_ADMIN_ROLE_NOT_FOUND"
                     }
                 }));
-                res.status(404).json({ message: "Role not found" });
+                res.status(500).json({ message: "System configuration error: organization admin role not found" });
                 return;
             }
 
+            // Hash password
             const passwordHash = await hashPassword(password);
+
+            // Create new user with PENDING_APPROVAL status
             const newUserData: Partial<User> = {
                 email: normalizedEmail,
                 passwordHash,
                 tenant,
-                role
+                role: orgAdminRole,
+                status: UserStatus.PENDING_APPROVAL
             };
 
             if (typeof fullName === "string" && fullName.trim().length > 0) {
                 newUserData.fullName = fullName.trim();
+            }
+
+            if (typeof phone === "string" && phone.trim().length > 0) {
+                newUserData.phone = phone.trim();
+            }
+
+            if (typeof jobTitle === "string" && jobTitle.trim().length > 0) {
+                newUserData.jobTitle = jobTitle.trim();
             }
 
             const createdUser = userRepo.create(newUserData);
@@ -200,19 +211,37 @@ export class AuthController {
                 return;
             }
 
-            logger.info("Register success", buildAuthMeta(req, {
+            logger.info("Register pending created", buildAuthMeta(req, {
                 category: "AUTH",
-                action: "REGISTER_SUCCESS",
-                status: "SUCCESS",
+                action: "REGISTER_PENDING_CREATED",
+                status: "PENDING_APPROVAL",
                 userId: userWithRelations.id,
                 metadata: {
                     email: userWithRelations.email,
                     tenantId: userWithRelations.tenant?.id,
-                    roleId: userWithRelations.role?.id
+                    roleId: userWithRelations.role?.id,
+                    status: userWithRelations.status
                 }
             }));
 
-            res.status(201).json({ user: sanitizeUser(userWithRelations) });
+            await Promise.all([
+                EmailService.sendCustomerRegistrationConfirmation({
+                    customerEmail: userWithRelations.email,
+                    customerName: userWithRelations.fullName,
+                    tenantName: userWithRelations.tenant?.name
+                }),
+                EmailService.sendSuperAdminRegistrationNotification({
+                    customerEmail: userWithRelations.email,
+                    customerName: userWithRelations.fullName,
+                    tenantName: userWithRelations.tenant?.name,
+                    tenantInviteCode: userWithRelations.tenant?.inviteCode
+                })
+            ]);
+
+            res.status(201).json({
+                message: "Registration request submitted and pending SentryX admin approval",
+                status: "PENDING_APPROVAL"
+            });
         } catch (error: unknown) {
             if (error instanceof QueryFailedError) {
                 const dbError = error as QueryFailedError & { driverError?: { code?: string } };
@@ -303,6 +332,45 @@ export class AuthController {
                 return;
             }
 
+            // Check user status before issuing tokens
+            if (user.status === UserStatus.PENDING_APPROVAL) {
+                logger.warn("Login blocked", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGIN_BLOCKED_PENDING_APPROVAL",
+                    status: "BLOCKED",
+                    userId: user.id,
+                    metadata: {
+                        email: normalizedEmail,
+                        userStatus: user.status,
+                        reason: "PENDING_APPROVAL"
+                    }
+                }));
+                res.status(403).json({
+                    message: "Your account is pending SentryX admin approval",
+                    status: "PENDING_APPROVAL"
+                });
+                return;
+            }
+
+            if (user.status === UserStatus.REJECTED) {
+                logger.warn("Login blocked", buildAuthMeta(req, {
+                    category: "AUTH",
+                    action: "LOGIN_BLOCKED_REJECTED",
+                    status: "BLOCKED",
+                    userId: user.id,
+                    metadata: {
+                        email: normalizedEmail,
+                        userStatus: user.status,
+                        reason: "REJECTED"
+                    }
+                }));
+                res.status(403).json({
+                    message: "Your registration request was rejected",
+                    status: "REJECTED"
+                });
+                return;
+            }
+
             const payload: AuthIdentityPayload = {
                 userId: user.id,
                 tenantId: user.tenant.id,
@@ -321,7 +389,8 @@ export class AuthController {
                 metadata: {
                     email: user.email,
                     tenantId: user.tenant.id,
-                    roleId: user.role.id
+                    roleId: user.role.id,
+                    userStatus: user.status
                 }
             }, payload));
 

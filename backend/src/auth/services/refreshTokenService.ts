@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { AppDataSource } from "../../db";
 import { RefreshTokenSession } from "../../models/RefreshTokenSession";
-import { User } from "../../models/User";
+import { User, UserStatus } from "../../models/User";
 import { signRefreshToken, verifyRefreshToken } from "./token";
 import type { AuthIdentityPayload } from "../types";
 
@@ -62,6 +62,10 @@ export async function validateRefreshTokenSession(refreshToken: string): Promise
 
     if (session.expiresAt.getTime() <= Date.now()) {
         throw new Error("Refresh token session expired");
+    }
+
+    if (session.user.status !== UserStatus.APPROVED) {
+        throw new Error(`Refresh token blocked for ${session.user.status} user`);
     }
 
     return {

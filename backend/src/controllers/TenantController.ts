@@ -1,7 +1,19 @@
 import { Request, Response } from "express";
+import { QueryFailedError, Repository } from "typeorm";
 import { AppDataSource } from "../db";
 import { Tenant } from "../models/Tenant";
 import { TenantLicense } from "../models/TenantLicense";
+
+function sanitizeTenant(tenant: Tenant) {
+    return {
+        id: tenant.id,
+        name: tenant.name,
+        inviteCode: tenant.inviteCode,
+        createdAt: tenant.createdAt,
+        tenantLicenses: tenant.tenantLicenses,
+        robots: tenant.robots,
+    };
+}
 
 export class TenantController {
     // Get all tenants with their connected licenses and robots
@@ -18,7 +30,7 @@ export class TenantController {
                 }
             });
 
-            res.status(200).json(tenants);
+            res.status(200).json(tenants.map((tenant) => sanitizeTenant(tenant)));
         } catch (error) {
             console.error("Error fetching tenants:", error);
             res.status(500).json({ message: "Internal server error" });
@@ -41,7 +53,7 @@ export class TenantController {
                 return;
             }
 
-            res.status(200).json(tenant);
+            res.status(200).json(sanitizeTenant(tenant));
         } catch (error) {
             console.error("Error fetching tenant:", error);
             res.status(500).json({ message: "Internal server error" });
@@ -110,17 +122,30 @@ export class TenantController {
         try {
             const { name } = req.body;
 
-            if (!name) {
+            if (typeof name !== "string" || name.trim().length === 0) {
                 res.status(400).json({ message: "Tenant name is required" });
                 return;
             }
 
             const tenantRepo = AppDataSource.getRepository(Tenant);
-            const newTenant = tenantRepo.create({ name });
+            const newTenant = tenantRepo.create({
+                name: name.trim()
+            });
+
+            newTenant.inviteCode = await TenantController.generateUniqueInviteCode(tenantRepo, newTenant);
+
             await tenantRepo.save(newTenant);
 
-            res.status(201).json(newTenant);
-        } catch (error) {
+            res.status(201).json(sanitizeTenant(newTenant));
+        } catch (error: unknown) {
+            if (error instanceof QueryFailedError) {
+                const dbError = error as QueryFailedError & { driverError?: { code?: string } };
+                if (dbError.driverError?.code === "23505") {
+                    res.status(409).json({ message: "Generated invite code already exists. Please try again." });
+                    return;
+                }
+            }
+
             console.error("Error creating tenant:", error);
             res.status(500).json({ message: "Internal server error" });
         }
@@ -145,7 +170,7 @@ export class TenantController {
             }
 
             await tenantRepo.save(tenant);
-            res.status(200).json(tenant);
+            res.status(200).json(sanitizeTenant(tenant));
         } catch (error) {
             console.error("Error updating tenant:", error);
             res.status(500).json({ message: "Internal server error" });
@@ -225,5 +250,20 @@ export class TenantController {
             console.error("Error removing tenant license:", error);
             res.status(500).json({ message: "Internal server error" });
         }
+    }
+
+    private static async generateUniqueInviteCode(
+        tenantRepo: Repository<Tenant>,
+        tenant: Tenant
+    ): Promise<string> {
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            const inviteCode = tenant.generateInviteCode();
+            const existing = await tenantRepo.findOneBy({ inviteCode });
+            if (!existing) {
+                return inviteCode;
+            }
+        }
+
+        throw new Error("Unable to generate a unique tenant invite code");
     }
 }
