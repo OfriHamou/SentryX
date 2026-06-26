@@ -25,6 +25,7 @@ import {
 import * as api from './api';
 import { hasPermission, useAuth } from './auth/AuthContext';
 import { PermissionGate } from './components/PermissionGate';
+import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
 // @ts-ignore
 import logoImg from './assets/LOGO.PNG';
 
@@ -88,6 +89,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const canAccessAnalytics = canRead('analytics') || canRead('reports');
     const canAccessAlerts = canReadAlerts;
     const canAccessSettings = canRead('settings') || canRead('roles');
+    const canAccessRegistrationRequests = canRead('registration_requests');
 
     useEffect(() => {
         loadData();
@@ -246,6 +248,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                     <Typography variant="overline" sx={{ color: '#718096', px: 2, fontWeight: 700, mt: 3, mb: 1, display: 'block' }}>MANAGEMENT</Typography>
                     <List>
                         {[
+                          { text: 'Registration Requests', icon: <VerifiedUserIcon /> },
                           { text: 'Alerts', icon: <NotificationsIcon /> },
                           { text: 'Settings', icon: <SettingsIcon /> }
                         ].map((item) => (
@@ -412,7 +415,8 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                     <TableHead>
                                         <TableRow sx={{ '& th': { backgroundColor: '#fff', fontWeight: 600, color: '#A3AED0', py: 2.5, borderBottom: '1px solid #E2E8F0', fontSize: '0.8rem', letterSpacing: 0.5 } }}>
                                             <TableCell width="15%">ORGANIZATION</TableCell>
-                                            <TableCell width="30%">TENANT ID</TableCell>
+                                            <TableCell width="18%">ORGANIZATION ID</TableCell>
+                                            <TableCell width="27%">TENANT ID</TableCell>
                                             <TableCell align="center" width="10%">ROBOTS</TableCell>
                                             <TableCell width="20%">LICENSES</TableCell>
                                             <TableCell align="right" width="25%">ACTIONS</TableCell>
@@ -421,13 +425,13 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                     <TableBody>
                                         {loading ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
+                                                <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
                                                     <CircularProgress size={50} thickness={4} sx={{ color: '#4318FF' }} />
                                                 </TableCell>
                                             </TableRow>
                                         ) : tenants.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={5} align="center" sx={{ py: 10 }}>
+                                                <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
                                                     <BlockIcon sx={{ fontSize: 60, color: '#e2e8f0', mb: 2 }} />
                                                     <Typography variant="h6" color="#718096" sx={{ fontWeight: 700}}>Datastore is empty</Typography>
                                                     <Typography variant="body2" color="#a0aec0">Create your first organization to populate this view.</Typography>
@@ -437,6 +441,24 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                             tenants.map(tenant => (
                                                 <TableRow key={tenant.id} hover sx={{ '& td': { borderBottom: '1px solid #F4F7FE', py: 2.5 } }}>
                                                     <TableCell sx={{ fontWeight: 700, color: '#2B3674', fontSize: '0.95rem' }}>{tenant.name}</TableCell>
+                                                    <TableCell>
+                                                        <Tooltip title="Copy organization invite code">
+                                                            <Chip
+                                                                label={tenant.inviteCode || 'N/A'}
+                                                                onClick={() => tenant.inviteCode && navigator.clipboard?.writeText(tenant.inviteCode)}
+                                                                size="small"
+                                                                sx={{
+                                                                    fontWeight: 700,
+                                                                    fontFamily: "'Fira Code', monospace",
+                                                                    backgroundColor: '#E6F9F5',
+                                                                    color: '#05CD99',
+                                                                    border: '1px solid rgba(5, 205, 153, 0.2)',
+                                                                    borderRadius: '6px',
+                                                                    maxWidth: 180
+                                                                }}
+                                                            />
+                                                        </Tooltip>
+                                                    </TableCell>
                                                     <TableCell sx={{ color: '#A3AED0', fontFamily: "'Fira Code', monospace", fontSize: '0.8rem', fontWeight: 500 }}>{tenant.id}</TableCell>
                                                     <TableCell align="center">
                                                         <Box sx={{ backgroundColor: tenant.robots?.length > 0 ? '#E6F9F5' : '#F4F7FE', color: tenant.robots?.length > 0 ? '#05CD99' : '#A3AED0', display: 'inline-flex', padding: '6px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem' }}>
@@ -503,6 +525,14 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
 
                 {activeTab === 'Analytics' && (
                     <PermissionGate allowed={canAccessAnalytics} deniedMessage="You do not have permission to view this page." />
+                )}
+
+                {activeTab === 'Registration Requests' && (
+                    <PermissionGate allowed={canAccessRegistrationRequests} deniedMessage="You do not have permission to view this page.">
+                        <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', overflow: 'hidden', backgroundColor: '#fff', border: 'none', p: 3 }}>
+                            <RegistrationRequestsTab />
+                        </Card>
+                    </PermissionGate>
                 )}
 
                 {activeTab === 'Alerts' && (
