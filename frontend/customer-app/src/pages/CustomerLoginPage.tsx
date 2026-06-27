@@ -21,17 +21,30 @@ export default function CustomerLoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
     setError('');
+    setErrorStatus(null);
 
     try {
       await login(email, password);
     } catch (err) {
       if (isAxiosError(err)) {
-        setError(err.response?.data?.message || 'Login failed. Please try again.');
+        const status = err.response?.status;
+        const data = err.response?.data;
+
+        if (status === 403 && data?.status === 'PENDING_APPROVAL') {
+          setError('Your account is still waiting for SentryX admin approval.');
+          setErrorStatus('PENDING_APPROVAL');
+        } else if (status === 403 && data?.status === 'REJECTED') {
+          setError('Your registration request was rejected. Please contact SentryX support.');
+          setErrorStatus('REJECTED');
+        } else {
+          setError(data?.message || 'Login failed. Please try again.');
+        }
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -100,7 +113,10 @@ export default function CustomerLoginPage() {
             </Typography>
 
             {error && (
-              <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+              <Alert
+                severity={errorStatus ? 'warning' : 'error'}
+                sx={{ mb: 3, borderRadius: 2 }}
+              >
                 {error}
               </Alert>
             )}

@@ -4,12 +4,14 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import CustomerApp from './app/CustomerApp';
 import CustomerLoginPage from './pages/CustomerLoginPage';
 import CustomerSignupPage from './pages/CustomerSignupPage';
+import PendingApprovalPage from './pages/PendingApprovalPage';
 import { CustomerAuthProvider, useCustomerAuth } from './auth/CustomerAuthProvider';
 
 const AuthRoutes = () => (
   <Routes>
     <Route path="/login" element={<CustomerLoginPage />} />
     <Route path="/signup" element={<CustomerSignupPage />} />
+    <Route path="/pending-approval" element={<PendingApprovalPage />} />
     <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );
@@ -24,7 +26,7 @@ const AppShell = () => {
       return;
     }
 
-    if (location.pathname === '/login' || location.pathname === '/signup') {
+    if (location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/pending-approval') {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, location.pathname, navigate]);

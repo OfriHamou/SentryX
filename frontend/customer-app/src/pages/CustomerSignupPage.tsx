@@ -12,17 +12,19 @@ import {
 } from '@mui/material';
 import { isAxiosError } from 'axios';
 import logoImg from '../assets/LOGO.png';
-import { useCustomerAuth } from '../auth/CustomerAuthProvider';
+import { useNavigate } from 'react-router-dom';
 import { register } from '../auth/customerAuthService';
 import { Link as RouterLink } from 'react-router-dom';
 
 export default function CustomerSignupPage() {
-  const { login } = useCustomerAuth();
+  const navigate = useNavigate();
+  const [organizationId, setOrganizationId] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantId, setTenantId] = useState('');
-  const [roleId, setRoleId] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,16 +33,25 @@ export default function CustomerSignupPage() {
     setLoading(true);
     setError('');
 
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
     try {
       await register({
+        tenantInviteCode: organizationId,
         email,
         password,
         fullName: fullName.trim() ? fullName.trim() : undefined,
-        tenantId,
-        roleId,
+        phone: phone.trim() ? phone.trim() : undefined,
+        jobTitle: jobTitle.trim() ? jobTitle.trim() : undefined,
       });
 
-      await login(email, password);
+      // Navigate to pending approval page (not auto-login)
+      navigate('/pending-approval', { replace: true });
     } catch (err) {
       if (isAxiosError(err)) {
         setError(err.response?.data?.message || 'Sign up failed. Please try again.');
@@ -107,7 +118,7 @@ export default function CustomerSignupPage() {
                 mb: 3,
               }}
             >
-              Create your SentryX account
+              Register your organization
             </Typography>
 
             {error && (
@@ -119,11 +130,12 @@ export default function CustomerSignupPage() {
             <form onSubmit={handleSignup}>
               <TextField
                 fullWidth
-                label="Full Name"
-                value={fullName}
-                onChange={(event) => setFullName(event.target.value)}
-                placeholder="Your name"
+                label="Organization ID"
+                value={organizationId}
+                onChange={(event) => setOrganizationId(event.target.value)}
+                placeholder="e.g., ORG-ACME-A1B2C3"
                 disabled={loading}
+                required
                 sx={{
                   mb: 2.5,
                   '& .MuiOutlinedInput-root': {
@@ -144,12 +156,39 @@ export default function CustomerSignupPage() {
 
               <TextField
                 fullWidth
-                label="Email"
+                label="Full Name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Your full name"
+                disabled={loading}
+                required
+                sx={{
+                  mb: 2.5,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(226, 232, 240, 0.8)',
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    color: '#F8FAFC',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(226, 232, 240, 0.2)',
+                  },
+                }}
+              />
+
+              <TextField
+                fullWidth
+                label="Work Email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
+                placeholder="you@company.com"
                 disabled={loading}
+                required
                 sx={{
                   mb: 2.5,
                   '& .MuiOutlinedInput-root': {
@@ -176,6 +215,7 @@ export default function CustomerSignupPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Create a password"
                 disabled={loading}
+                required
                 sx={{
                   mb: 2.5,
                   '& .MuiOutlinedInput-root': {
@@ -196,10 +236,37 @@ export default function CustomerSignupPage() {
 
               <TextField
                 fullWidth
-                label="Tenant ID"
-                value={tenantId}
-                onChange={(event) => setTenantId(event.target.value)}
-                placeholder="Tenant identifier"
+                label="Confirm Password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Confirm your password"
+                disabled={loading}
+                required
+                sx={{
+                  mb: 2.5,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2,
+                    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(226, 232, 240, 0.8)',
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    color: '#F8FAFC',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(226, 232, 240, 0.2)',
+                  },
+                }}
+              />
+
+              <TextField
+                fullWidth
+                label="Phone (Optional)"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="Your phone number"
                 disabled={loading}
                 sx={{
                   mb: 2.5,
@@ -221,10 +288,10 @@ export default function CustomerSignupPage() {
 
               <TextField
                 fullWidth
-                label="Role ID"
-                value={roleId}
-                onChange={(event) => setRoleId(event.target.value)}
-                placeholder="Role identifier"
+                label="Job Title (Optional)"
+                value={jobTitle}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Your job title"
                 disabled={loading}
                 sx={{
                   mb: 3,
@@ -250,10 +317,12 @@ export default function CustomerSignupPage() {
                 type="submit"
                 disabled={
                   loading ||
+                  !organizationId ||
+                  !fullName ||
                   !email ||
                   !password ||
-                  !tenantId ||
-                  !roleId
+                  !confirmPassword ||
+                  password !== confirmPassword
                 }
                 sx={{
                   backgroundColor: '#7C8FE8',

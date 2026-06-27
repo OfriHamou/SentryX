@@ -22,12 +22,14 @@ interface RegisterRequest {
   email: string;
   password: string;
   fullName?: string;
-  tenantId: string;
-  roleId: number | string;
+  tenantInviteCode: string;
+  phone?: string;
+  jobTitle?: string;
 }
 
 interface RegisterResponse {
-  user: CustomerAuthUser;
+  message: string;
+  status: string;
 }
 
 export const login = async (email: string, password: string) => {
