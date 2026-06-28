@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import { EventController } from "../controllers/EventController"; 
 import { isLoggedIn } from "../middleware/auth";
+import { hasAccess } from "../middleware/permission";
 
 const router = Router();
 
@@ -121,7 +122,7 @@ router.post("/report", upload.single("frame"), async (req, res) => {
     }
 });
 
-router.get("/", isLoggedIn, EventController.getEvents);   
+router.get("/", isLoggedIn, hasAccess("events", "read"), EventController.getEvents);
 
 export default router;
 

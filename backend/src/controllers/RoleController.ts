@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../db";
 import { Role } from "../models/Role";
+import { RoleCacheService } from "../services/RoleCacheService";
 
 type PermissionAction = "read" | "write";
 type AllowedPagesPayload = Record<string, PermissionAction[]>;
@@ -69,8 +70,7 @@ function validateAllowedPagesPayload(allowedPages: unknown): { value?: AllowedPa
 export class RoleController {
     static async getAllRoles(req: Request, res: Response) {
         try {
-            const roleRepo = AppDataSource.getRepository(Role);
-            const roles = await roleRepo.find();
+            const roles = await RoleCacheService.getAllRoles();
             res.status(200).json(roles);
         } catch (error) {
             console.error("Error fetching roles:", error);
@@ -81,9 +81,8 @@ export class RoleController {
     static async getRoleById(req: Request, res: Response): Promise<void> {
         try {
             const roleId = Number(req.params.id);
-            const roleRepo = AppDataSource.getRepository(Role);
 
-            const role = await roleRepo.findOne({ where: { id: roleId } });
+            const role = await RoleCacheService.getRoleById(roleId);
 
             if (!role) {
                 res.status(404).json({ message: "Role not found" });
@@ -130,6 +129,7 @@ export class RoleController {
             });
 
             const savedRole = await roleRepo.save(createdRole);
+            RoleCacheService.clearRoleCache();
             res.status(201).json(savedRole);
         } catch (error) {
             console.error("Error creating role:", error);
@@ -182,6 +182,7 @@ export class RoleController {
             role.allowedPages = allowedPagesValidation.value;
 
             const updatedRole = await roleRepo.save(role);
+            RoleCacheService.clearRoleCache();
             res.status(200).json(updatedRole);
         } catch (error) {
             console.error("Error updating role:", error);
