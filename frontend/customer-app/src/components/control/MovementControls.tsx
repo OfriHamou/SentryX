@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';    
-import { Box, Paper, Typography, Stack, Slider, Button, Select, MenuItem, FormControl, Grid, IconButton } from '@mui/material'; 
+import { Alert, Box, Paper, Typography, Stack, Slider, Button, Select, MenuItem, FormControl, Grid, IconButton } from '@mui/material'; 
 import { Videocam as CameraIcon, TipsAndUpdates as TipsIcon, Fullscreen as FullscreenIcon } from '@mui/icons-material'; 
 import { useFullscreen } from '../../hooks/useFullscreen';
 import JoystickControl from '../live/JoystickControl';
@@ -7,7 +7,11 @@ import { useRobotMove } from '../../hooks/robot/useRobotMove';
 import { videoStreamUrl } from '../../api/robot';
 import type { MoveInput } from '../../types/robot';
 
-export default function MovementControls() {
+interface MovementControlsProps {
+    canWrite: boolean;
+}
+
+export default function MovementControls({ canWrite }: MovementControlsProps) {
     const { move, stop } = useRobotMove();
     const [speed, setSpeed] = useState(50);
     const videoRef = useRef<HTMLDivElement>(null);
@@ -23,6 +27,11 @@ export default function MovementControls() {
     return (
         <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Movement Controls</Typography>
+            {!canWrite && (
+                <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+                    Read-only control access
+                </Alert>
+            )}
 
             <Grid container spacing={3}>
                 {/* Left: camera feed + joystick */}
@@ -51,7 +60,7 @@ export default function MovementControls() {
                     </Box>
 
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Directional Control</Typography>
-                    <JoystickControl size={150} onMove={handleMove} onStop={stop} />
+                    {canWrite && <JoystickControl size={150} onMove={handleMove} onStop={stop} />}
                 </Grid>
 
                 {/* Right: speed + go-to-location + tips */}
@@ -61,7 +70,7 @@ export default function MovementControls() {
                             <Typography variant="body2" color="text.secondary">Speed</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{speed}%</Typography>
                         </Stack>
-                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} />
+                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={!canWrite} />
                     </Box>
 
                     {/* Go to location — PREPARED, needs autonomous nav */}

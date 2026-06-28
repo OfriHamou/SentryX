@@ -11,8 +11,10 @@ import { useDetectionStatus } from '../hooks/robot/useDetectionStatus';
 import { useEvents } from '../hooks/robot/useEvents';
 import { useFullscreen } from '../hooks/useFullscreen';
 import FullscreenControls from '../components/live/fullscreen/FullscreenControls';
+import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
 
 export default function Live() {
+    const { user } = useCustomerAuth();
     const { data: battery } = useBattery();
     const { data: robot } = useRobot();
     const { data: detection } = useDetectionStatus();
@@ -21,6 +23,7 @@ export default function Live() {
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const { isFullscreen, enterFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
     const location = useLocation();
+    const canWriteControl = hasCustomerPermission(user?.allowedPages, 'control', 'write');
 
     useEffect(() => {
         if (location.state?.fullscreen) {
@@ -85,7 +88,7 @@ export default function Live() {
                         onFullscreenToggle={toggleFullscreen}
                     />
 
-                    {isFullscreen && (<FullscreenControls 
+                    {isFullscreen && canWriteControl && (<FullscreenControls 
                         onExitFullscreen={toggleFullscreen}
                         onAlarm={() => console.log('alarm triggered')}
                         onCallEmergency={() => console.log('emergency call triggered')}
@@ -101,6 +104,7 @@ export default function Live() {
                         onCallEmergency={() => console.log('emergency call triggered')}
                         volume={volume}
                         onVolumeChange={setVolume}
+                        canControl={canWriteControl}
                 />
             </Paper>
 
