@@ -3,6 +3,7 @@ import { Box, Paper, Typography, Stack, Button, Select, MenuItem, TextField, For
 import AlertCard from '../components/alerts/AlertCard';
 import { useEvents } from '../hooks/robot/useEvents';
 import { useRobot } from '../hooks/robot/useRobot';
+import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
 
 type StatusFilter = 'all' | 'active' | 'resolved';
 type TimeRange = '24h' | 'week' | 'month' | 'custom';
@@ -15,6 +16,7 @@ const RANGE_MS: Record<'24h' | 'week' | 'month', number> = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function Alerts() {
+    const { user } = useCustomerAuth();
     const { data: events } = useEvents();
     const { data: robot } = useRobot();
     const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
@@ -22,6 +24,7 @@ export default function Alerts() {
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
+    const canWriteAlerts = hasCustomerPermission(user?.allowedPages, 'alerts', 'write');
 
     const location = robot?.location ?? '—';
     const isResolved = (id: string) => resolvedIds.has(id);
@@ -108,7 +111,7 @@ export default function Alerts() {
                 <Stack spacing={2}>
                     {visible.map((e) => (
                         <AlertCard key={e.id} event={e} location={location}
-                            resolved={isResolved(e.id)} onResolve={() => markResolved(e.id)} />
+                            resolved={isResolved(e.id)} onResolve={() => markResolved(e.id)} canResolve={canWriteAlerts} />
                     ))}
                 </Stack>
             )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Box, Button, Stack, Slider, IconButton } from '@mui/material';
+import { Box, Button, Stack, Slider, IconButton, Alert } from '@mui/material';
 import {
     Mic as MicIcon,
     MicOff as MicOffIcon,
@@ -16,6 +16,7 @@ interface ActionPanelProps {
     onCallEmergency: () => void;
     volume: number;
     onVolumeChange: (value: number) => void;
+    canControl: boolean;
 }
 
 export default function ActionPanel({
@@ -24,6 +25,7 @@ export default function ActionPanel({
     onCallEmergency,
     volume,
     onVolumeChange,
+    canControl,
 }: ActionPanelProps) {
     const [talking, setTalking] = useState(false);
     const { move, stop } = useRobotMove();
@@ -36,10 +38,16 @@ export default function ActionPanel({
 
     return (
         <Stack spacing={2}>
+            {!canControl && (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    Read-only live access
+                </Alert>
+            )}
             <Button
                 variant="outlined"
                 startIcon={talking ? <MicOffIcon /> : <MicIcon />}
                 onClick={handleTalkToggle}
+                disabled={!canControl}
                 sx={{
                     py: 1.5,
                     justifyContent: 'center',
@@ -58,6 +66,7 @@ export default function ActionPanel({
                 color="error"
                 startIcon={<AlarmIcon />}
                 onClick={onAlarm}
+                disabled={!canControl}
                 sx={{ py:1.5, textTransform: 'none', borderRadius: 3 }}
             >
                 Trigger Alarm
@@ -68,6 +77,7 @@ export default function ActionPanel({
                 color="primary"
                 startIcon={<PhoneIcon />}
                 onClick={onCallEmergency}
+                disabled={!canControl}
                 sx={{ py:1.5, textTransform: 'none', borderRadius: 3 }}
             >
                 Call Emergency
@@ -90,10 +100,11 @@ export default function ActionPanel({
                 min={0}
                 max={100}
                 aria-label="Volume"
+                disabled={!canControl}
             />
             </Box>
             <Box sx={{ pt: 2 }}>
-                <JoystickControl size={140} onMove={move} onStop={stop} />
+                {canControl && <JoystickControl size={140} onMove={move} onStop={stop} />}
             </Box>
         </Stack>
     );

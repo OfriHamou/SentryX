@@ -7,6 +7,7 @@ import StatusCard from '../components/dashboard/StatusCard';
 import StatCard from '../components/dashboard/StatCard';
 import ActionButton from '../components/dashboard/ActionButton';
 import RecentAlerts from '../components/dashboard/RecentAlerts';
+import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
 import { useRobot } from '../hooks/robot/useRobot';
 import { useBattery } from '../hooks/robot/useBattery';
 import { useDetectionStatus } from '../hooks/robot/useDetectionStatus';
@@ -22,6 +23,10 @@ const BATTERY_LABEL: Record<BatteryLevel, string> = {
 
 export default function Dashboard() {
     const navigate = useNavigate();
+    const { user } = useCustomerAuth();
+    const canReadLive = hasCustomerPermission(user?.allowedPages, 'live', 'read');
+    const canReadControl = hasCustomerPermission(user?.allowedPages, 'control', 'read');
+    const canWriteControl = hasCustomerPermission(user?.allowedPages, 'control', 'write');
 
     const { data: robot } = useRobot();
     const { data: battery } = useBattery();
@@ -78,10 +83,10 @@ export default function Dashboard() {
 
             {/* Quick actions */}
             <Grid container spacing={2}>
-                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<PatrolIcon />} label="Start Patrol" tone="primary" /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<PauseIcon />} label="Pause" tone="danger" /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<LiveIcon />} label="View Live" tone="primary" onClick={() => navigate('/live')} /></Grid>
-                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<ControlIcon />} label="Manual Control" tone="primary" onClick={() => navigate('/live', { state: { fullscreen: true } })} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<PatrolIcon />} label="Start Patrol" tone="primary" disabled={!canWriteControl} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<PauseIcon />} label="Pause" tone="danger" disabled={!canWriteControl} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<LiveIcon />} label="View Live" tone="primary" onClick={() => navigate('/live')} disabled={!canReadLive} /></Grid>
+                <Grid size={{ xs: 6, md: 3 }}><ActionButton icon={<ControlIcon />} label="Manual Control" tone="primary" onClick={() => navigate('/control')} disabled={!canReadControl} /></Grid>
             </Grid>
         </Box>
     );
