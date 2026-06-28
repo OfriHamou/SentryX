@@ -22,6 +22,7 @@ import licenseRoutes from "./routes/licenseRoutes";
 import robotRoutes from "./routes/robotRoutes";
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
+import organizationRoutes from "./routes/organizationRoutes";
 import eventRoutes from "./routes/eventRoutes";
 import faceRoutes from "./routes/faceRoutes";
 import { logger } from "./utils/logger";
@@ -76,6 +77,8 @@ function initializeRoutes(app: express.Application) {
     app.use("/api/roles", roleRoutes);
     // Mount auth routes under /api/auth
     app.use("/api/auth", authRoutes);
+    // Mount organization portal routes under /api/organization
+    app.use("/api/organization", organizationRoutes);
     // Mount event routes under /api/events
     app.use("/api/events", eventRoutes);
 
