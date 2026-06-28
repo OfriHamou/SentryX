@@ -6,6 +6,7 @@ import QuickActions from '../components/control/QuickActions';
 import { useBattery } from '../hooks/robot/useBattery';
 import { useRobot } from '../hooks/robot/useRobot';
 import type { BatteryLevel } from '../types/robot';
+import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
 
 const BATTERY_LABEL: Record<BatteryLevel, string> = {
     Battery_High: 'High',
@@ -15,8 +16,10 @@ const BATTERY_LABEL: Record<BatteryLevel, string> = {
 };
 
 export default function Control() {
+    const { user } = useCustomerAuth();
     const { data: robot } = useRobot();
     const { data: battery } = useBattery();
+    const canWriteControl = hasCustomerPermission(user?.allowedPages, 'control', 'write');
 
     const robotName = robot?.name ?? '—';
     const location = robot?.location ?? '—';
@@ -39,7 +42,7 @@ export default function Control() {
             </Paper>
 
             <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 8 }}><MovementControls /></Grid>
+                <Grid size={{ xs: 12, md: 8 }}><MovementControls canWrite={canWriteControl} /></Grid>
                 <Grid size={{ xs: 12, md: 4 }}><QuickActions /></Grid>
             </Grid>
         </Box>

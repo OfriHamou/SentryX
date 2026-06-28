@@ -6,7 +6,13 @@ const SCHEDULES = [
     { label: 'Friday–Saturday', time: '08:00 – 22:00', enabled: false },
 ];
 
-export default function PatrolSchedule() {
+interface PatrolScheduleProps {
+    canWrite: boolean;
+}
+
+export default function PatrolSchedule({ canWrite }: PatrolScheduleProps) {
+    const patrolScheduleEnabled = false;
+
     return (
         <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 3, opacity: 0.6 }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -25,7 +31,7 @@ export default function PatrolSchedule() {
                     </Box>
                 ))}
             </Stack>
-            <Button startIcon={<AddIcon />} disabled fullWidth sx={{ mt: 1.5, textTransform: 'none', border: '1px dashed', borderColor: 'grey.300', borderRadius: 2 }}>
+            <Button startIcon={<AddIcon />} disabled={!canWrite || !patrolScheduleEnabled} fullWidth sx={{ mt: 1.5, textTransform: 'none', border: '1px dashed', borderColor: 'grey.300', borderRadius: 2 }}>
                 Add Schedule
             </Button>
         </Paper>

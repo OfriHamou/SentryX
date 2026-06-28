@@ -54,38 +54,89 @@ WHERE invite_code IS NULL;
 -- Add index on invite code for efficient lookup
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_invite_code ON tenants(invite_code);
 
--- Ensure required platform roles exist.
+-- Ensure canonical platform and tenant roles exist.
 INSERT INTO roles (role_name, allowed_pages)
 VALUES
   ('SUPER_ADMIN', '{"all":["read","write"]}'::jsonb),
   (
-    'ORG_ADMIN',
+    'TENANT_ADMIN',
     '{
+      "customer_portal":["read"],
       "dashboard":["read"],
       "live":["read","write"],
       "history":["read"],
       "control":["read","write"],
-      "alerts":["read"],
+      "alerts":["read","write"],
       "settings":["read","write"],
       "faces":["read","write"],
       "robots":["read","write"],
       "events":["read"],
-      "licenses":["read"]
+      "organization_portal":["read"],
+      "organization_users":["read","write"],
+      "organization_settings":["read","write"],
+      "organization_robots":["read","write"],
+      "organization_visitors":["read","write"],
+      "organization_on_call":["read","write"]
     }'::jsonb
   ),
   (
-    'TENANT_ADMIN',
+    'OPERATIONS_MANAGER',
     '{
+      "customer_portal":["read"],
       "dashboard":["read"],
       "live":["read","write"],
       "history":["read"],
       "control":["read","write"],
-      "alerts":["read"],
-      "settings":["read","write"],
-      "faces":["read","write"],
+      "alerts":["read","write"],
       "robots":["read","write"],
       "events":["read"],
-      "licenses":["read"]
+      "organization_portal":["read"],
+      "organization_robots":["read","write"],
+      "organization_on_call":["read","write"],
+      "organization_settings":["read"]
+    }'::jsonb
+  ),
+  (
+    'SECURITY_OPERATOR',
+    '{
+      "customer_portal":["read"],
+      "dashboard":["read"],
+      "live":["read"],
+      "history":["read"],
+      "control":["read","write"],
+      "alerts":["read","write"],
+      "robots":["read"],
+      "events":["read"],
+      "organization_portal":["read"],
+      "organization_on_call":["read"]
+    }'::jsonb
+  ),
+  (
+    'VISITOR_MANAGER',
+    '{
+      "customer_portal":["read"],
+      "dashboard":["read"],
+      "live":["read"],
+      "history":["read"],
+      "alerts":["read"],
+      "faces":["read","write"],
+      "organization_portal":["read"],
+      "organization_visitors":["read","write"],
+      "organization_settings":["read"]
+    }'::jsonb
+  ),
+  (
+    'VIEWER',
+    '{
+      "customer_portal":["read"],
+      "dashboard":["read"],
+      "live":["read"],
+      "history":["read"],
+      "alerts":["read"],
+      "robots":["read"],
+      "events":["read"],
+      "organization_portal":["read"],
+      "organization_settings":["read"]
     }'::jsonb
   )
 ON CONFLICT (role_name) DO UPDATE

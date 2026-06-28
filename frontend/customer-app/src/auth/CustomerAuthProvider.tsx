@@ -21,14 +21,18 @@ export const hasCustomerPermission = (
   const normalizedResource = resource.trim().toLowerCase();
   const wildcardActions = allowedPages['all'];
 
-  if (Array.isArray(wildcardActions) && wildcardActions.map((a) => a.toLowerCase()).includes('read')) {
-    return true;
+  if (Array.isArray(wildcardActions)) {
+    const normalizedWildcardActions = wildcardActions.map((a) => a.toLowerCase());
+    if (normalizedWildcardActions.includes(action) || normalizedWildcardActions.includes('all')) {
+      return true;
+    }
   }
 
   const resourceActions = allowedPages[normalizedResource];
   if (!Array.isArray(resourceActions)) return false;
 
-  return resourceActions.map((a) => a.toLowerCase()).includes(action);
+  const normalizedResourceActions = resourceActions.map((a) => a.toLowerCase());
+  return normalizedResourceActions.includes(action) || normalizedResourceActions.includes('all');
 };
 
 interface CustomerAuthContextValue extends CustomerAuthState {

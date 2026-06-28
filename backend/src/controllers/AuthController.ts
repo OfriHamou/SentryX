@@ -3,7 +3,6 @@ import { QueryFailedError } from "typeorm";
 import { AppDataSource } from "../db";
 import { User, UserStatus } from "../models/User";
 import { Tenant } from "../models/Tenant";
-import { Role } from "../models/Role";
 import { signAccessToken } from "../auth/services/token";
 import { hashPassword, verifyPassword } from "../auth/services/password";
 import {
@@ -14,6 +13,7 @@ import {
 import type { AuthIdentityPayload, RegistrationRequestDTO } from "../auth/types";
 import { EmailService } from "../services/EmailService";
 import { logger } from "../utils/logger";
+import { RoleCacheService } from "../services/RoleCacheService";
 
 interface LoginRequestBody {
     email?: string;
@@ -110,7 +110,6 @@ export class AuthController {
 
             const userRepo = AppDataSource.getRepository(User);
             const tenantRepo = AppDataSource.getRepository(Tenant);
-            const roleRepo = AppDataSource.getRepository(Role);
 
             // Check if email already registered
             const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
@@ -145,23 +144,20 @@ export class AuthController {
                 return;
             }
 
-            // Find ORG_ADMIN role (case-insensitive search)
-            const orgAdminRole = await roleRepo.createQueryBuilder("role")
-                .where("LOWER(role.role_name) = LOWER(:roleName)", { roleName: "ORG_ADMIN" })
-                .orWhere("LOWER(role.role_name) = LOWER(:roleName)", { roleName: "TENANT_ADMIN" })
-                .getOne();
+            // New organization registrations become tenant admins after approval.
+            const [tenantAdminRole] = await RoleCacheService.getRolesByNames(["TENANT_ADMIN"]);
 
-            if (!orgAdminRole) {
+            if (!tenantAdminRole) {
                 logger.error("Register failed", undefined, buildAuthMeta(req, {
                     category: "AUTH",
                     action: "REGISTER_FAILED",
                     status: "FAILED",
                     metadata: {
                         email: normalizedEmail,
-                        reason: "ORG_ADMIN_ROLE_NOT_FOUND"
+                        reason: "TENANT_ADMIN_ROLE_NOT_FOUND"
                     }
                 }));
-                res.status(500).json({ message: "System configuration error: organization admin role not found" });
+                res.status(500).json({ message: "System configuration error: tenant admin role not found" });
                 return;
             }
 
@@ -173,7 +169,7 @@ export class AuthController {
                 email: normalizedEmail,
                 passwordHash,
                 tenant,
-                role: orgAdminRole,
+                role: tenantAdminRole,
                 status: UserStatus.PENDING_APPROVAL
             };
 

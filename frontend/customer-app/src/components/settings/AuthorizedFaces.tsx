@@ -5,7 +5,11 @@ import { getFaces, addFace, deleteFace, faceImageUrl, type AuthorizedFace } from
 import { Edit as EditIcon } from '@mui/icons-material';
 import FaceModal from './FaceModal';
 
-export default function AuthorizedFaces() {
+interface AuthorizedFacesProps {
+    canWrite: boolean;
+}
+
+export default function AuthorizedFaces({ canWrite }: AuthorizedFacesProps) {
     const [faces, setFaces] = useState<AuthorizedFace[]>([]);
     const [name, setName] = useState('');
     const [role, setRole] = useState('');
@@ -53,13 +57,18 @@ export default function AuthorizedFaces() {
                                 {f.role ?? '—'} • Added {new Date(f.addedAt).toLocaleDateString()}
                             </Typography>
                         </Box>
-                        <IconButton onClick={() => setSelected(f)} sx={{ color: 'text.secondary' }}><EditIcon /></IconButton>
-                        <IconButton onClick={() => handleDelete(f.id)} sx={{ color: 'error.main' }}><DeleteIcon /></IconButton>
+                        {canWrite && (
+                            <>
+                                <IconButton onClick={() => setSelected(f)} sx={{ color: 'text.secondary' }}><EditIcon /></IconButton>
+                                <IconButton onClick={() => handleDelete(f.id)} sx={{ color: 'error.main' }}><DeleteIcon /></IconButton>
+                            </>
+                        )}
                     </Box>
                 ))}
             </Stack>
 
             {/* Add person */}
+            {canWrite && (
             <Stack spacing={1.5} sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'grey.200' }}>
                 <Stack direction="row" spacing={1}>
                     <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
@@ -74,7 +83,8 @@ export default function AuthorizedFaces() {
                     {saving ? 'Adding…' : 'Add Person'}
                 </Button>
             </Stack>
-            {selected && <FaceModal face={selected} open onClose={() => setSelected(null)} onChanged={load} />}
+            )}
+            {selected && <FaceModal face={selected} open onClose={() => setSelected(null)} onChanged={load} canWrite={canWrite} />}
         </Paper>
     );
 }

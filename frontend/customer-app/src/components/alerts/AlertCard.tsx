@@ -18,9 +18,10 @@ interface AlertCardProps {
     resolved: boolean;
     onResolve: () => void;
     onViewDetails?: () => void;
+    canResolve: boolean;
 }
 
-export default function AlertCard({ event, location, resolved, onResolve, onViewDetails }: AlertCardProps) {
+export default function AlertCard({ event, location, resolved, onResolve, onViewDetails, canResolve }: AlertCardProps) {
     const display = getEventDisplay(event);
     const colors = resolved ? RESOLVED : (ALERT_COLORS[display.color] ?? ALERT_COLORS.default);
 
@@ -49,8 +50,10 @@ export default function AlertCard({ event, location, resolved, onResolve, onView
                         <Stack direction="row" spacing={1} sx={{ mt: 1.5 }}>
                             <Button size="small" variant="contained" disableElevation onClick={onViewDetails}
                                 sx={{ textTransform: 'none', borderRadius: 2 }}>View Details</Button>
-                            <Button size="small" variant="outlined" onClick={onResolve}
-                                sx={{ textTransform: 'none', borderRadius: 2 }}>Mark Resolved</Button>
+                            {canResolve && (
+                                <Button size="small" variant="outlined" onClick={onResolve}
+                                    sx={{ textTransform: 'none', borderRadius: 2 }}>Mark Resolved</Button>
+                            )}
                         </Stack>
                     )}
                 </Box>

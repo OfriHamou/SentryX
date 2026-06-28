@@ -1,8 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import { AppDataSource } from "../db";
-import { Role } from "../models/Role";
 import type { AuthIdentityPayload } from "../auth/types";
 import { logger } from "../utils/logger";
+import { RoleCacheService } from "../services/RoleCacheService";
 
 function getRequestId(req: Request): string | undefined {
     const header = req.headers["x-request-id"];
@@ -144,8 +143,7 @@ export function hasAccess(resource: string, action?: string) {
         }
 
         try {
-            const roleRepo = AppDataSource.getRepository(Role);
-            const role = await roleRepo.findOneBy({ id: auth.roleId });
+            const role = await RoleCacheService.getRoleById(auth.roleId);
 
             if (!role) {
                 logger.warn("Forbidden access", {
