@@ -1,0 +1,20 @@
+{
+  "name": "periodics",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only --env-file=\"../backend/.env\" index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mongoose": "^9.4.1",
+    "pg": "^8.20.0",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.28"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "@types/pg": "^8.20.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.6.2"
+  }
+}
