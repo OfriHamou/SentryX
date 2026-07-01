@@ -63,7 +63,7 @@ module.exports = {
         },
         {
           name: 'python-AI-worker',
-          script: 'python',
+          script: 'python3',
           args: 'worker.py --env-file="../.env"',
           cwd: './mq/worker',
           watch: false,
