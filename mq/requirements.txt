@@ -1,2 +1,4 @@
-redis==7.4.0
+redis==7.0.1
 psycopg2-binary==2.9.12
+google-genai==1.47.0
+pillow==11.3.0
