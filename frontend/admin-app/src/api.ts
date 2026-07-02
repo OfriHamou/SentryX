@@ -140,3 +140,10 @@ export const getAlerts = () => api.get('/alerts').then(res => res.data).catch(()
     console.warn("Could not fetch alerts from /api/alerts");
     return [];
 });
+
+
+export const createLicense = (data: { code: string; description: string }) =>
+    api.post('/licenses', data).then(res => res.data);
+
+export const deleteLicense = (code: string) =>
+    api.delete(`/licenses/${code}`).then(res => res.data);

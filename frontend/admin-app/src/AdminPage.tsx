@@ -20,12 +20,14 @@ import {
     Notifications as NotificationsIcon,
     Memory as MemoryIcon,
     VerifiedUser as VerifiedUserIcon,
-    TrendingUp as TrendingUpIcon
+    TrendingUp as TrendingUpIcon,
+    VpnKey as VpnKeyIcon
 } from '@mui/icons-material';
 import * as api from './api';
 import { hasPermission, useAuth } from './auth/AuthContext';
 import { PermissionGate } from './components/PermissionGate';
 import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
+import { LicensesTab } from './components/LicensesTab';
 // @ts-ignore
 import logoImg from './assets/LOGO.PNG';
 
@@ -249,6 +251,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                     <List>
                         {[
                           { text: 'Registration Requests', icon: <VerifiedUserIcon /> },
+                          { text: 'Licenses', icon: <VpnKeyIcon /> },
                           { text: 'Alerts', icon: <NotificationsIcon /> },
                           { text: 'Settings', icon: <SettingsIcon /> }
                         ].map((item) => (
@@ -532,6 +535,12 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                         <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', overflow: 'hidden', backgroundColor: '#fff', border: 'none', p: 3 }}>
                             <RegistrationRequestsTab />
                         </Card>
+                    </PermissionGate>
+                )}
+
+                {activeTab === 'Licenses' && (
+                    <PermissionGate allowed={canReadLicenses} deniedMessage="You do not have permission to view this page.">
+                        <LicensesTab />
                     </PermissionGate>
                 )}
 
