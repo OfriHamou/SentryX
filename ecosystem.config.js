@@ -58,19 +58,22 @@ module.exports = {
             env: {
                 ...parseEnvFile('./backend/.env'),
                 NODE_ENV: 'development',
-                RUN_CONCURRENTLY: 'true'          // Flips on the parallel engine feature we built!
+                RUN_CONCURRENTLY: 'true'
             }
+        },
+        {
+          name: 'python-worker',
+          script: './mq/venv/bin/python',
+          args: 'worker.py --env-file=".env"',
+          cwd: './mq/worker',
+          watch: false,
+          // Since cwd is ./mq/worker, the sentryx root .env is at ../../.env from the script's dir,
+          // but parseEnvFile runs from where `pm2` command is run (the root sentryx dir).
+          // So if pm2 is run in sentryx folder, parseEnvFile('./.env') finds sentryx/.env
+          env: {
+              ...parseEnvFile('./mq/worker/.env')
+          },
+
         }
-        // {
-        //   name: 'python-worker',
-        //   script: 'python',
-        //   args: 'worker.py --env-file="../.env"',
-        //   cwd: './mq/worker',
-        //   watch: false,
-        //   // Since cwd is ./mq/worker, the sentryx root .env is at ../../.env from the script's dir,
-        //   // but parseEnvFile runs from where `pm2` command is run (the root sentryx dir).
-        //   // So if pm2 is run in sentryx folder, parseEnvFile('./.env') finds sentryx/.env
-        //   env: parseEnvFile('./.env')
-        // }
     ]
 };
