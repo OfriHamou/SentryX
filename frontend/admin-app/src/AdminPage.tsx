@@ -28,6 +28,7 @@ import { hasPermission, useAuth } from './auth/AuthContext';
 import { PermissionGate } from './components/PermissionGate';
 import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
 import { LicensesTab } from './components/LicensesTab';
+import BellNotifications from './components/BellNotifications';
 // @ts-ignore
 import logoImg from './assets/LOGO.PNG';
 
@@ -287,9 +288,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                         </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, backgroundColor: '#fff', p: 1, borderRadius: '30px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)' }}>
-                        <IconButton sx={{ color: '#A3AED0', width: 40, height: 40 }}>
-                            <NotificationsIcon />
-                        </IconButton>
+                        {canReadAlerts && <BellNotifications />}
                         <Avatar sx={{ bgcolor: '#11047A', width: 40, height: 40, fontWeight: 'bold' }}>AD</Avatar>
                         {onLogout && (
                             <Button

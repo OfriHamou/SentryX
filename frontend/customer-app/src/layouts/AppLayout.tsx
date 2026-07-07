@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import logoImg from '../assets/LOGO.png';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
 import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import BellNotifications from '../components/notifications/BellNotifications';
 
 const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, permissions: [{ resource: 'dashboard', action: 'read' }] },
@@ -20,6 +21,7 @@ export default function AppLayout() {
             hasCustomerPermission(user?.allowedPages, permission.resource, permission.action)
         )
     );
+    const canReadAlerts = hasCustomerPermission(user?.allowedPages, 'alerts', 'read');
 
     return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -52,6 +54,7 @@ export default function AppLayout() {
                             {user.fullName}
                         </Typography>
                     )}
+                    {canReadAlerts && <BellNotifications />}
                     <Button
                         variant="contained"
                         sx={{

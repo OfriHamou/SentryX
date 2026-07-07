@@ -1,13 +1,13 @@
 import React from 'react';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import WorkspacesIcon from '@mui/icons-material/Workspaces';
-import { Avatar, Box, Button, Chip, IconButton, Typography } from '@mui/material';
+import { Avatar, Box, Button, Chip, Typography } from '@mui/material';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { useOrganizationAuth } from './auth/OrganizationAuthProvider';
 import { hasOrganizationPermission } from './auth/permissions';
 import AccessDenied from './components/AccessDenied';
 import PermissionGate from './components/PermissionGate';
 import Sidebar, { drawerWidth } from './components/Sidebar';
+import BellNotifications from './components/BellNotifications';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import UsersAccess from './pages/UsersAccess';
@@ -41,6 +41,7 @@ const OrganizationPage: React.FC = () => {
   const { user, logout } = useOrganizationAuth();
   const location = useLocation();
   const canReadPortal = hasOrganizationPermission(user?.allowedPages, 'organization_portal', 'read');
+  const canReadAlerts = hasOrganizationPermission(user?.allowedPages, 'alerts', 'read');
   const activeTitle = getActiveTitle(location.pathname);
 
   return (
@@ -112,9 +113,7 @@ const OrganizationPage: React.FC = () => {
                 flexShrink: 0,
               }}
             >
-              <IconButton sx={{ color: '#5B21B6', width: 38, height: 38, borderRadius: '8px' }}>
-                <NotificationsIcon />
-              </IconButton>
+              {canReadAlerts && <BellNotifications />}
               <Avatar sx={{ bgcolor: '#4C1D95', width: 38, height: 38, fontWeight: 'bold' }}>
                 {getInitials(user?.fullName)}
               </Avatar>
