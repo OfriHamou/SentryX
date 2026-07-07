@@ -25,6 +25,7 @@ import roleRoutes from "./routes/roleRoutes";
 import organizationRoutes from "./routes/organizationRoutes";
 import eventRoutes from "./routes/eventRoutes";
 import faceRoutes from "./routes/faceRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
 import { logger } from "./utils/logger";
 
 export const app = express();
@@ -47,7 +48,7 @@ function prerequisites() {
             }
             callback(new Error(`Not allowed by CORS: ${origin}`));
         },
-        methods: ["GET", "POST", "PUT", "DELETE"],
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
         allowedHeaders: ["Content-Type", "Authorization"]
     }));
 
@@ -81,6 +82,9 @@ function initializeRoutes(app: express.Application) {
     app.use("/api/organization", organizationRoutes);
     // Mount event routes under /api/events
     app.use("/api/events", eventRoutes);
+
+    // Mount notification routes under /api/notifications
+    app.use("/api/notifications", notificationRoutes);
 
     // Mount our Robot routes under /api/robot
     app.use("/api/robot", robotRoutes);
