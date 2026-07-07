@@ -11,6 +11,7 @@ import { License } from "../models/License";
 import { TenantLicense } from "../models/TenantLicense";
 import { RefreshTokenSession } from "../models/RefreshTokenSession";
 import { AuthorizedFace } from "../models/AuthorizedFace";
+import { SecurityShift } from "../models/SecurityShift";
 import mongoose from "mongoose";
 import { logger } from "../utils/logger";
 
@@ -43,7 +44,8 @@ export const AppDataSource = new DataSource({
         License,
         TenantLicense,
         RefreshTokenSession,
-        AuthorizedFace
+        AuthorizedFace,
+        SecurityShift
     ],
     migrations: [],
     subscribers: [],
