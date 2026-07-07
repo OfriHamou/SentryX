@@ -16,3 +16,24 @@ export interface OrganizationTenantUser {
   roleName: string;
   allowedPages: AllowedPages;
 }
+
+export type SecurityShiftStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+
+export interface SecurityShiftAssignedUser {
+  id: string;
+  fullName: string | null;
+  email: string;
+  roleName: string;
+}
+
+export interface SecurityShift {
+  id: string;
+  name: string;
+  startAt: string;
+  endAt: string;
+  status: SecurityShiftStatus;
+  notes: string | null;
+  assignedUser: SecurityShiftAssignedUser | null;
+  createdAt: string;
+  updatedAt: string;
+}

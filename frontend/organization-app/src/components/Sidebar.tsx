@@ -1,10 +1,13 @@
 import React from 'react';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import PeopleIcon from '@mui/icons-material/People';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WorkspacesIcon from '@mui/icons-material/Workspaces';
 import { Box, Divider, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { useOrganizationAuth } from '../auth/OrganizationAuthProvider';
+import { hasOrganizationPermission } from '../auth/permissions';
 // @ts-ignore
 import logoImg from '../assets/LOGO.PNG';
 
@@ -24,6 +27,8 @@ const navItemSx = (active: boolean) => ({
 
 const Sidebar: React.FC = () => {
   const location = useLocation();
+  const { user } = useOrganizationAuth();
+  const canReadSecurityShifts = hasOrganizationPermission(user?.allowedPages, 'organization_security_shifts', 'read');
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -107,6 +112,19 @@ const Sidebar: React.FC = () => {
               />
             </ListItemButton>
           </ListItem>
+          {canReadSecurityShifts && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton component={RouterLink} to="/security-shifts" sx={navItemSx(isActive('/security-shifts'))}>
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
+                  <EventAvailableIcon />
+                </ListItemIcon>
+                <ListItemText
+                  disableTypography
+                  primary={<Typography sx={{ fontWeight: isActive('/security-shifts') ? 700 : 500, fontSize: '0.95rem' }}>Security Shifts</Typography>}
+                />
+              </ListItemButton>
+            </ListItem>
+          )}
           <ListItem disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton component={RouterLink} to="/settings" sx={navItemSx(isActive('/settings'))}>
               <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>

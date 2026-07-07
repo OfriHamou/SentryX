@@ -10,6 +10,7 @@ import Sidebar, { drawerWidth } from './components/Sidebar';
 import BellNotifications from './components/BellNotifications';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
+import SecurityShifts from './pages/SecurityShifts';
 import UsersAccess from './pages/UsersAccess';
 
 const getInitials = (name?: string): string => {
@@ -28,6 +29,10 @@ const getInitials = (name?: string): string => {
 const getActiveTitle = (pathname: string): string => {
   if (pathname.startsWith('/users')) {
     return 'Users & Access';
+  }
+
+  if (pathname.startsWith('/security-shifts')) {
+    return 'Security Shifts';
   }
 
   if (pathname.startsWith('/settings')) {
@@ -137,6 +142,7 @@ const OrganizationPage: React.FC = () => {
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/users" element={<UsersAccess />} />
+            <Route path="/security-shifts" element={<SecurityShifts />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/access-denied" element={<AccessDenied />} />
           </Routes>
