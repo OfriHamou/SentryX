@@ -4,6 +4,7 @@ import { Role } from "../models/Role";
 import { User } from "../models/User";
 import { Robot } from "../models/Robot";
 import { Notification } from "../models/Notification";
+import { NotificationRecipient } from "../models/NotificationRecipient";
 import { RobotConfig } from "../models/RobotConfig";
 import { Event } from "../models/Event";
 import { License } from "../models/License";
@@ -36,6 +37,7 @@ export const AppDataSource = new DataSource({
         User,
         Robot,
         Notification,
+        NotificationRecipient,
         RobotConfig,
         Event,
         License,

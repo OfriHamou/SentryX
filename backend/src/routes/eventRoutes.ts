@@ -33,7 +33,7 @@ redisConnection.on("error", (error) => {
     console.error("Redis background connection error:", error.message);
 });
 
-const eventQueue = new Queue("event-processing", { connection: redisConnection });
+const eventQueue = new Queue("event-processing", { connection: redisConnection as any });
 
 eventQueue.on("error", (error) => {
     console.error("BullMQ Queue background error:", error.message);

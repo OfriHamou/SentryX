@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { Tenant } from "./Tenant";
 import { Role } from "./Role";
 import { RefreshTokenSession } from "./RefreshTokenSession";
+import { NotificationRecipient } from "./NotificationRecipient";
 
 export enum UserStatus {
     PENDING_APPROVAL = "PENDING_APPROVAL",
@@ -68,5 +69,8 @@ export class User {
 
     @OneToMany(() => RefreshTokenSession, (session) => session.user)
     refreshTokenSessions: RefreshTokenSession[];
+
+    @OneToMany(() => NotificationRecipient, (recipient) => recipient.user)
+    notificationRecipients: NotificationRecipient[];
 }
 
