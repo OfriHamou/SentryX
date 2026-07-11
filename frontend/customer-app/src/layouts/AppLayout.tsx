@@ -2,7 +2,7 @@ import { AppBar, Toolbar, Box, Button, Container, Typography } from '@mui/materi
 import { NavLink, Outlet } from 'react-router-dom';
 import logoImg from '../assets/LOGO.png';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
-import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon, Settings as SettingsIcon, PhotoLibrary as MediaIcon } from '@mui/icons-material';
 import BellNotifications from '../components/notifications/BellNotifications';
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
     { label: 'Alerts', path: '/alerts', icon: <AlertsIcon />, permissions: [{ resource: 'alerts', action: 'read' }] },
     { label: 'Control', path: '/control', icon: <ControlIcon />, permissions: [{ resource: 'control', action: 'read' }] },
     { label: 'History', path: '/history', icon: <HistoryIcon />, permissions: [{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }] },
+    { label: 'Media', path: '/media', icon: <MediaIcon />, permissions: [{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }] },
     { label: 'Settings', path: '/settings', icon: <SettingsIcon />, permissions: [{ resource: 'settings', action: 'read' }, { resource: 'robots', action: 'read' }, { resource: 'faces', action: 'read' }] },
 ] as const;
 

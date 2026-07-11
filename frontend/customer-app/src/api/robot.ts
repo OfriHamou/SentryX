@@ -1,12 +1,16 @@
 import { robotApi } from './client';
 import type { BatteryStatus, DetectionStatus, RobotEvent, MoveInput } from '../types/robot';
-import { customerApi } from './customerApi';
+import { customerApi, CUSTOMER_API_BASE_URL } from './customerApi';
 
 export const videoStreamUrl = () => 
     `${robotApi.defaults.baseURL}/robot/video`;
 
 export const eventImageUrl = (filename: string) =>
     `${robotApi.defaults.baseURL}/robot/events/image/${encodeURIComponent(filename)}`;
+
+// DB event image (served by our backend, by event id)
+export const eventDbImageUrl = (eventId: string) =>
+    `${CUSTOMER_API_BASE_URL}/events/${encodeURIComponent(eventId)}/image`;
 
 export const getBattery = async (): Promise<BatteryStatus> => {
     const response = await robotApi.get<BatteryStatus>('/robot/battery');

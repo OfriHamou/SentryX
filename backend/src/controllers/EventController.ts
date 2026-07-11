@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../db";
 import { Event } from "../models/Event";
 import type { AuthIdentityPayload } from "../auth/types";
+import path from "path";
+import fs from "fs";
 
 // DB row -> RobotEvent shape (what the frontend already expects)
 function toRobotEvent(event: Event) {
@@ -21,22 +23,42 @@ function toRobotEvent(event: Event) {
 
 export class EventController {
     static async getEvents(req: Request, res: Response): Promise<void> {
-    try {
-        const auth = res.locals.auth as AuthIdentityPayload | undefined;
-        if (!auth?.tenantId) {
-            res.status(401).json({ ok: false, error: "Unauthenticated" });
-            return;
+        try {
+            const auth = res.locals.auth as AuthIdentityPayload | undefined;
+            if (!auth?.tenantId) {
+                res.status(401).json({ ok: false, error: "Unauthenticated" });
+                return;
+            }
+            const repo = AppDataSource.getRepository(Event);
+            const events = await repo.find({
+                where: { tenant: { id: auth.tenantId } },
+                order: { createdAt: "DESC" },
+                take: 200,
+            });
+            res.status(200).json({ ok: true, events: events.map(toRobotEvent) });
+        } catch (error) {
+            console.error("Error fetching events:", error);
+            res.status(500).json({ ok: false, error: "Failed to fetch events" });
         }
-        const repo = AppDataSource.getRepository(Event);
-        const events = await repo.find({
-            where: { tenant: { id: auth.tenantId } },
-            order: { createdAt: "DESC" },
-            take: 200,
-        });
-        res.status(200).json({ ok: true, events: events.map(toRobotEvent) });
-    } catch (error) {
-        console.error("Error fetching events:", error);
-        res.status(500).json({ ok: false, error: "Failed to fetch events" });
     }
-}
+
+    static async getEventImage(req: Request, res: Response): Promise<void> {
+        try {
+            const event = await AppDataSource.getRepository(Event).findOne({ where: { id: req.params.id } });
+            if (!event?.imagePath) {
+                res.status(404).json({ ok: false, error: "Not found" });
+                return;
+            }
+            const baseLocation = process.env.frames_to_process_save_location || "/tmp/sentryx/media/events/";
+            const filePath = path.resolve(baseLocation, event.imagePath);
+            if (!fs.existsSync(filePath)) {
+                res.status(404).json({ ok: false, error: "Image not found" });
+                return;
+            }
+            res.sendFile(filePath);
+        } catch (error) {
+            console.error("Error serving event image:", error);
+            res.status(500).json({ ok: false, error: "Failed to serve image" });
+        }
+    }
 }
