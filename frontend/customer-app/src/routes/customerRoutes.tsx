@@ -6,6 +6,7 @@ import Live from '../pages/Live';
 import Alerts from '../pages/Alerts';   
 import Control from '../pages/Control';  
 import History from '../pages/History';    
+import MediaGallery from '../pages/MediaGallery';
 import Settings from '../pages/Settings';      
 import AccessDenied from '../components/AccessDenied';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
@@ -40,6 +41,7 @@ export default function CustomerRoutes() {
         <Route path="/alerts" element={<RequireCustomerPermission anyOf={[{ resource: 'alerts', action: 'read' }]}><Alerts /></RequireCustomerPermission>} />
         <Route path="/control" element={<RequireCustomerPermission anyOf={[{ resource: 'control', action: 'read' }]}><Control /></RequireCustomerPermission>} />
         <Route path="/history" element={<RequireCustomerPermission anyOf={[{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }]}><History /></RequireCustomerPermission>} />
+        <Route path="/media" element={<RequireCustomerPermission anyOf={[{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }]}><MediaGallery /></RequireCustomerPermission>} />
         <Route path="/settings" element={<RequireCustomerPermission anyOf={[{ resource: 'settings', action: 'read' }, { resource: 'robots', action: 'read' }, { resource: 'faces', action: 'read' }]}><Settings /></RequireCustomerPermission>} />
       </Route>
     </Routes>

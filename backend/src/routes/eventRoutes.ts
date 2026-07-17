@@ -123,6 +123,7 @@ router.post("/report", upload.single("frame"), async (req, res) => {
 });
 
 router.get("/", isLoggedIn, hasAccess("events", "read"), EventController.getEvents);
+router.get("/:id/image", EventController.getEventImage);
 
 export default router;
 
