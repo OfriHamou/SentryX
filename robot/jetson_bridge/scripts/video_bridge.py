@@ -79,15 +79,21 @@ def ensure_capture_thread():
             capture_thread.start()
 
 
-def generate_frames():
+def get_latest_frame_bytes(wait_timeout=1.0):
     ensure_capture_thread()
 
+    with frame_cond:
+        if latest_jpeg is None:
+            frame_cond.wait(timeout=wait_timeout)
+
+        return latest_jpeg
+
+
+def generate_frames():
     while True:
-        with frame_cond:
-            if latest_jpeg is None:
-                frame_cond.wait(timeout=1.0)
-                continue
-            jpg_bytes = latest_jpeg
+        jpg_bytes = get_latest_frame_bytes()
+        if jpg_bytes is None:
+            continue
 
         yield (
             b"--frame\r\n"
@@ -123,6 +129,22 @@ def video_feed():
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     response.headers["Connection"] = "keep-alive"
+    return response
+
+
+@app.route("/frame", methods=["GET"])
+def frame():
+    jpg_bytes = get_latest_frame_bytes()
+    if jpg_bytes is None:
+        return jsonify({
+            "ok": False,
+            "error": "No frame available yet"
+        }), 503
+
+    response = Response(jpg_bytes, mimetype="image/jpeg")
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 if __name__ == "__main__":
