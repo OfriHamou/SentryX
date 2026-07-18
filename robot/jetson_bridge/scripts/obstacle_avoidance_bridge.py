@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
+import os
+import sys
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ROBOT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+if ROBOT_ROOT not in sys.path:
+    sys.path.insert(0, ROBOT_ROOT)
 
 import json
 import logging
-import os
 import threading
 import urllib.request
 
