@@ -1,12 +1,9 @@
-from __future__ import annotations
-
 import logging
 import os
 import random
 import threading
 import time
 import urllib.request
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
@@ -37,27 +34,89 @@ class StreamUnavailableError(RuntimeError):
     pass
 
 
-@dataclass
 class AvoidanceConfig:
-    video_stream_url: str = os.environ.get("VIDEO_STREAM_URL", "http://127.0.0.1:5001/video_feed")
-    blocked_threshold: float = float(os.environ.get("AVOIDANCE_BLOCKED_THRESHOLD", "0.75"))
-    blocked_confirmation_frames: int = max(1, int(os.environ.get("AVOIDANCE_BLOCKED_CONFIRMATION_FRAMES", "3")))
-    forward_speed: float = float(os.environ.get("AVOIDANCE_FORWARD_SPEED", "0.35"))
-    reverse_speed: float = float(os.environ.get("AVOIDANCE_REVERSE_SPEED", "-0.3"))
-    turn_speed: float = float(os.environ.get("AVOIDANCE_TURN_SPEED", "0.45"))
-    stop_delay_seconds: float = float(os.environ.get("AVOIDANCE_STOP_DELAY_SECONDS", "0.2"))
-    reverse_duration_seconds: float = float(os.environ.get("AVOIDANCE_REVERSE_DURATION_SECONDS", "0.5"))
-    turn_duration_seconds: float = float(os.environ.get("AVOIDANCE_TURN_DURATION_SECONDS", "0.7"))
-    turn_duration_increment_seconds: float = float(os.environ.get("AVOIDANCE_TURN_DURATION_INCREMENT_SECONDS", "0.15"))
-    max_turn_duration_seconds: float = float(os.environ.get("AVOIDANCE_MAX_TURN_DURATION_SECONDS", "1.2"))
-    mjpeg_timeout_seconds: float = float(os.environ.get("AVOIDANCE_STREAM_TIMEOUT_SECONDS", "5"))
-    frame_retry_delay_seconds: float = float(os.environ.get("AVOIDANCE_STREAM_RETRY_DELAY_SECONDS", "0.5"))
-    loop_sleep_seconds: float = float(os.environ.get("AVOIDANCE_LOOP_SLEEP_SECONDS", "0.05"))
-    forward_refresh_seconds: float = float(os.environ.get("AVOIDANCE_FORWARD_REFRESH_SECONDS", "1.0"))
-    model_path: str = os.environ.get("AVOIDANCE_MODEL_PATH", "").strip()
-    model_device: str = os.environ.get("AVOIDANCE_MODEL_DEVICE", "cpu").strip() or "cpu"
-    blocked_class_index: int = int(os.environ.get("AVOIDANCE_BLOCKED_CLASS_INDEX", "0"))
-    free_class_index: int = int(os.environ.get("AVOIDANCE_FREE_CLASS_INDEX", "1"))
+    def __init__(
+        self,
+        video_stream_url=None,
+        blocked_threshold=None,
+        blocked_confirmation_frames=None,
+        forward_speed=None,
+        reverse_speed=None,
+        turn_speed=None,
+        stop_delay_seconds=None,
+        reverse_duration_seconds=None,
+        turn_duration_seconds=None,
+        turn_duration_increment_seconds=None,
+        max_turn_duration_seconds=None,
+        mjpeg_timeout_seconds=None,
+        frame_retry_delay_seconds=None,
+        loop_sleep_seconds=None,
+        forward_refresh_seconds=None,
+        model_path=None,
+        model_device=None,
+        blocked_class_index=None,
+        free_class_index=None,
+    ):
+        self.video_stream_url = video_stream_url or os.environ.get("VIDEO_STREAM_URL", "http://127.0.0.1:5001/video_feed")
+        self.blocked_threshold = float(
+            blocked_threshold if blocked_threshold is not None else os.environ.get("AVOIDANCE_BLOCKED_THRESHOLD", "0.75")
+        )
+        self.blocked_confirmation_frames = max(
+            1,
+            int(
+                blocked_confirmation_frames
+                if blocked_confirmation_frames is not None
+                else os.environ.get("AVOIDANCE_BLOCKED_CONFIRMATION_FRAMES", "3")
+            ),
+        )
+        self.forward_speed = float(forward_speed if forward_speed is not None else os.environ.get("AVOIDANCE_FORWARD_SPEED", "0.35"))
+        self.reverse_speed = float(reverse_speed if reverse_speed is not None else os.environ.get("AVOIDANCE_REVERSE_SPEED", "-0.3"))
+        self.turn_speed = float(turn_speed if turn_speed is not None else os.environ.get("AVOIDANCE_TURN_SPEED", "0.45"))
+        self.stop_delay_seconds = float(
+            stop_delay_seconds if stop_delay_seconds is not None else os.environ.get("AVOIDANCE_STOP_DELAY_SECONDS", "0.2")
+        )
+        self.reverse_duration_seconds = float(
+            reverse_duration_seconds
+            if reverse_duration_seconds is not None
+            else os.environ.get("AVOIDANCE_REVERSE_DURATION_SECONDS", "0.5")
+        )
+        self.turn_duration_seconds = float(
+            turn_duration_seconds if turn_duration_seconds is not None else os.environ.get("AVOIDANCE_TURN_DURATION_SECONDS", "0.7")
+        )
+        self.turn_duration_increment_seconds = float(
+            turn_duration_increment_seconds
+            if turn_duration_increment_seconds is not None
+            else os.environ.get("AVOIDANCE_TURN_DURATION_INCREMENT_SECONDS", "0.15")
+        )
+        self.max_turn_duration_seconds = float(
+            max_turn_duration_seconds
+            if max_turn_duration_seconds is not None
+            else os.environ.get("AVOIDANCE_MAX_TURN_DURATION_SECONDS", "1.2")
+        )
+        self.mjpeg_timeout_seconds = float(
+            mjpeg_timeout_seconds if mjpeg_timeout_seconds is not None else os.environ.get("AVOIDANCE_STREAM_TIMEOUT_SECONDS", "5")
+        )
+        self.frame_retry_delay_seconds = float(
+            frame_retry_delay_seconds
+            if frame_retry_delay_seconds is not None
+            else os.environ.get("AVOIDANCE_STREAM_RETRY_DELAY_SECONDS", "0.5")
+        )
+        self.loop_sleep_seconds = float(
+            loop_sleep_seconds if loop_sleep_seconds is not None else os.environ.get("AVOIDANCE_LOOP_SLEEP_SECONDS", "0.05")
+        )
+        self.forward_refresh_seconds = float(
+            forward_refresh_seconds
+            if forward_refresh_seconds is not None
+            else os.environ.get("AVOIDANCE_FORWARD_REFRESH_SECONDS", "1.0")
+        )
+        self.model_path = (model_path if model_path is not None else os.environ.get("AVOIDANCE_MODEL_PATH", "")).strip()
+        self.model_device = (model_device if model_device is not None else os.environ.get("AVOIDANCE_MODEL_DEVICE", "cpu")).strip() or "cpu"
+        self.blocked_class_index = int(
+            blocked_class_index if blocked_class_index is not None else os.environ.get("AVOIDANCE_BLOCKED_CLASS_INDEX", "0")
+        )
+        self.free_class_index = int(
+            free_class_index if free_class_index is not None else os.environ.get("AVOIDANCE_FREE_CLASS_INDEX", "1")
+        )
 
 
 class MjpegStreamClient:
