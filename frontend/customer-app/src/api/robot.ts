@@ -1,5 +1,14 @@
 import { robotApi } from './client';
-import type { BatteryStatus, DetectionStatus, RobotEvent, MoveInput } from '../types/robot';
+import type {
+    AvoidanceHealth,
+    AvoidanceStatus,
+    BatteryStatus,
+    ControlModeStatus,
+    DetectionStatus,
+    MoveInput,
+    RobotControlMode,
+    RobotEvent,
+} from '../types/robot';
 import { customerApi, CUSTOMER_API_BASE_URL } from './customerApi';
 
 export const videoStreamUrl = () => 
@@ -53,6 +62,41 @@ export const moveRobot = async (input: MoveInput) => {
 
 export const stopRobot = async () => {
     const response = await robotApi.post('/robot/stop');
+    return response.data;
+};
+
+export const getControlMode = async (): Promise<ControlModeStatus> => {
+    const response = await robotApi.get<ControlModeStatus>('/robot/control-mode');
+    return response.data;
+};
+
+export const setControlMode = async (mode: RobotControlMode) => {
+    const response = await robotApi.post('/robot/control-mode', { mode });
+    return response.data;
+};
+
+export const getAvoidanceStatus = async (): Promise<AvoidanceStatus> => {
+    const response = await robotApi.get<AvoidanceStatus>('/robot/avoidance/status');
+    return response.data;
+};
+
+export const getAvoidanceHealth = async (): Promise<AvoidanceHealth> => {
+    const response = await robotApi.get<AvoidanceHealth>('/robot/avoidance/health');
+    return response.data;
+};
+
+export const pauseAvoidance = async () => {
+    const response = await robotApi.post('/robot/avoidance/pause');
+    return response.data;
+};
+
+export const resumeAvoidance = async () => {
+    const response = await robotApi.post('/robot/avoidance/resume');
+    return response.data;
+};
+
+export const stopAvoidance = async () => {
+    const response = await robotApi.post('/robot/avoidance/stop');
     return response.data;
 };
 

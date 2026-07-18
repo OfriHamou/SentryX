@@ -11,7 +11,8 @@ The **Live** page is the main screen of the SentryX customer app. It lets the us
 - Watch the robot's live video feed
 - See current detection status (face, smoke, fire, motion)
 - Review recent events
-- Drive the robot with a joystick
+- Drive the robot with a joystick in Manual mode
+- Switch between Manual and Auto obstacle-avoidance modes
 - Trigger Alarm / Emergency / Talk
 - Enter fullscreen mode with a larger joystick overlay
 
@@ -102,9 +103,10 @@ frontend/customer-app/src/
 
 ```
 Robot (Jetson, Python)
-  ├─ web_bridge.py        (port 5000, motor + battery)
-  ├─ video_bridge.py      (port 5001, MJPEG stream)
-  └─ detection_bridge.py  (port 5002, face detection + events)
+  ├─ web_bridge.py                 (port 5000, motor + battery + control mode)
+  ├─ video_bridge.py               (port 5001, MJPEG stream)
+  ├─ detection_bridge.py           (port 5002, face detection + events)
+  └─ obstacle_avoidance_bridge.py  (port 5003, blocked/free auto drive)
         ↓
 Backend (Node, Express, port 4000)
   backend/index.js — proxy to Jetson
@@ -145,18 +147,26 @@ const MIN_INTERVAL_MS = 1000 / MAX_SENDS_PER_SECOND;
 
 If an event arrives inside the window, we store it. When the window closes, the most recent value is sent.
 
-### 3. Event registry with fallback
+### 3. Manual/Auto ownership
+
+The joystick is preserved, but it is only enabled while backend control mode is `manual`.
+
+- `manual` -> joystick requests go through the existing `/api/robot/move`
+- `auto` -> joystick UI is disabled and the robot bridge returns `409 Conflict` for manual move attempts
+- stop remains available in both modes
+
+### 4. Event registry with fallback
 
 `eventRegistry.tsx` is a map of `event.type → {icon, title, color}` with a `fallbackEventDisplay` for unknown types. Benefits:
 
 - The backend can add new event types **without breaking the frontend**
 - Presentation lives on the frontend — easy to change without coordination
 
-### 4. Central types
+### 5. Central types
 
 `types/robot.ts` defines the shape of every piece of data flowing through the system. Every layer (API, hooks, components) references the same types. Rename a field in one place → TypeScript finds every call site.
 
-### 5. Fullscreen: browser event as source of truth
+### 6. Fullscreen: browser event as source of truth
 
 `useFullscreen` listens to the browser's `fullscreenchange` event — this means Esc, our exit button, or any other trigger all update the state correctly. We never manage fullscreen state manually.
 
@@ -169,6 +179,7 @@ If an event arrives inside the window, we store it. When the window closes, the 
 - Node 20+
 - backend running on port 3001 (`cd backend && npm run dev`)
 - Network access to the robot (VPN or same LAN) — otherwise the page loads but without data or video
+- Jetson avoidance bridge running on port 5003 for Auto mode
 
 **Development:**
 
@@ -194,6 +205,12 @@ Output goes to `dist/`.
 VITE_ROBOT_API_URL=http://localhost:3001/api
 ```
 
+Backend also needs:
+
+```text
+JETSON_AVOIDANCE_URL=http://sentryx-jetson:5003
+```
+
 ---
 
 ## What has been implemented
@@ -205,6 +222,7 @@ VITE_ROBOT_API_URL=http://localhost:3001/api
 - ✅ **Commit 5** — DetectionStatusCard + RecentActivityCard
 - ✅ **Commit 6** — useFullscreen + FullscreenControls (shell)
 - ✅ **Commit 7** — Joystick + useRobotMove (throttled)
+- ✅ **Commit 8** — Manual/Auto selector + avoidance status panel
 
 ---
 
@@ -226,6 +244,7 @@ VITE_ROBOT_API_URL=http://localhost:3001/api
 - The robot runs on private IP `10.10.248.123`. Local development needs VPN or an SSH tunnel.
 - `react-joystick-component` is older than React 19; any warnings are non-blocking.
 - Battery percentage is a linear map of `9.9–12.0V` — suitable for the 12V pack used today; different batteries would need different thresholds.
+- Auto mode is V1 camera-based blocked/free avoidance only. It is not navigation, mapping, or distance sensing.
 
 ---
 
@@ -239,3 +258,4 @@ VITE_ROBOT_API_URL=http://localhost:3001/api
 | Change polling frequency | The relevant hook in `hooks/robot/` (`10_000`, `5_000`, etc.) |
 | Migrate to a new TypeScript backend | Change `VITE_ROBOT_API_URL`; if response shapes differ, update `types/robot.ts` |
 | Change the app width | `AppLayout.tsx` — `<Container maxWidth="..." />` |
+| Change auto mode UI or polling | `pages/Control.tsx`, `components/control/AutoModePanel.tsx`, `hooks/robot/useControlMode.ts`, `hooks/robot/useAvoidanceStatus.ts` |

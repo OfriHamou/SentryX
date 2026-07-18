@@ -10,6 +10,14 @@ router.get("/health",  RobotController.getHealth);
 router.get("/battery", RobotController.getBattery);
 router.post("/move", isLoggedIn, hasAccess("control", "write"), RobotController.move);
 router.post("/stop", isLoggedIn, hasAccess("control", "write"), RobotController.stop);
+router.get("/control-mode", isLoggedIn, hasAccess("control", "read"), RobotController.getControlMode);
+router.post("/control-mode", isLoggedIn, hasAccess("control", "write"), RobotController.setControlMode);
+router.get("/avoidance/health", isLoggedIn, hasAccess("control", "read"), RobotController.getAvoidanceHealth);
+router.get("/avoidance/status", isLoggedIn, hasAccess("control", "read"), RobotController.getAvoidanceStatus);
+router.post("/avoidance/start", isLoggedIn, hasAccess("control", "write"), RobotController.startAvoidance);
+router.post("/avoidance/stop", isLoggedIn, hasAccess("control", "write"), RobotController.stopAvoidance);
+router.post("/avoidance/pause", isLoggedIn, hasAccess("control", "write"), RobotController.pauseAvoidance);
+router.post("/avoidance/resume", isLoggedIn, hasAccess("control", "write"), RobotController.resumeAvoidance);
 
 // Video stream
 router.get("/video", RobotController.getVideoStream);

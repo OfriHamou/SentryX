@@ -1,0 +1,20 @@
+[Unit]
+Description=SentryX obstacle avoidance bridge
+After=network-online.target video-bridge.service roscore.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/projects/SentryX/robot
+Environment=PYTHONUNBUFFERED=1
+Environment=WEB_BRIDGE_URL=http://127.0.0.1:5000
+Environment=VIDEO_STREAM_URL=http://127.0.0.1:5001/video_feed
+Environment=AVOIDANCE_PORT=5003
+EnvironmentFile=-/home/jetson/projects/SentryX/robot/.env
+ExecStart=/usr/bin/env python3 /home/jetson/projects/SentryX/robot/jetson_bridge/scripts/obstacle_avoidance_bridge.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
