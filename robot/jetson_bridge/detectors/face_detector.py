@@ -85,10 +85,14 @@ class FaceDetector:
         self.backend_url = (backend_url or os.environ.get("BACKEND_URL", "http://localhost:4000")).rstrip("/")
         self.robot_id = robot_id or os.environ.get("ROBOT_ID", "")
         self.refresh_interval = int(os.environ.get("FACES_REFRESH_INTERVAL", refresh_interval))  # seconds
+        self.frame_scale = min(1.0, max(0.25, float(os.environ.get("FACE_FRAME_SCALE", "0.5"))))
         self.match_tolerance = float(os.environ.get("FACE_MATCH_TOLERANCE", "0.55"))
         self.match_margin = float(os.environ.get("FACE_MATCH_MARGIN", "0.03"))
         self.encoding_jitters = int(os.environ.get("FACE_ENCODING_JITTERS", "2"))
+        self.live_encoding_jitters = int(os.environ.get("FACE_LIVE_ENCODING_JITTERS", "2"))
         self.detect_upsample = int(os.environ.get("FACE_DETECT_UPSAMPLE", "1"))
+        self.detect_model = os.environ.get("FACE_DETECT_MODEL", "hog")
+        self.encoding_model = os.environ.get("FACE_ENCODING_MODEL", "large")
 
         self.known_encodings = []
         self.known_names = []
@@ -119,7 +123,7 @@ class FaceDetector:
                         locations = face_recognition.face_locations(
                             image,
                             number_of_times_to_upsample=self.detect_upsample,
-                            model="hog"
+                            model=self.detect_model
                         )
                         if len(locations) != 1:
                             print(
@@ -132,7 +136,8 @@ class FaceDetector:
                         encs = face_recognition.face_encodings(
                             image,
                             known_face_locations=locations,
-                            num_jitters=self.encoding_jitters
+                            num_jitters=self.encoding_jitters,
+                            model=self.encoding_model
                         )
                         if encs:
                             rows.append((name, json.dumps(encs[0].tolist())))
@@ -236,19 +241,20 @@ class FaceDetector:
         return best_name, self._face_distance_to_confidence(best_distance), True
 
     def detect_faces(self, frame):
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+        small_frame = cv2.resize(frame, (0, 0), fx=self.frame_scale, fy=self.frame_scale)
         rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
         rgb_small_frame = np.ascontiguousarray(rgb_small_frame)
 
         face_locations = face_recognition.face_locations(
             rgb_small_frame,
             number_of_times_to_upsample=self.detect_upsample,
-            model="hog"
+            model=self.detect_model
         )
         face_encodings = face_recognition.face_encodings(
             rgb_small_frame,
             face_locations,
-            num_jitters=1
+            num_jitters=self.live_encoding_jitters,
+            model=self.encoding_model
         )
 
         with self._lock:
@@ -256,11 +262,15 @@ class FaceDetector:
             known_names = list(self.known_names)
 
         detections = []
+        scale_back = 1.0 / self.frame_scale
         for location, encoding in zip(face_locations, face_encodings):
             name, confidence, is_known = self._match_face(encoding, known_encodings, known_names)
             top, right, bottom, left = location
             detections.append({
-                "x": left * 4, "y": top * 4, "w": (right - left) * 4, "h": (bottom - top) * 4,
+                "x": int(round(left * scale_back)),
+                "y": int(round(top * scale_back)),
+                "w": int(round((right - left) * scale_back)),
+                "h": int(round((bottom - top) * scale_back)),
                 "name": name, "confidence": confidence, "is_known": is_known,
             })
         return detections
