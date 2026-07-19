@@ -30,17 +30,21 @@ http://127.0.0.1:5001/video_feed
 - Reused `detection_bridge.py` background-worker and reconnect-style error handling
 - Reused `video_bridge.py` as the only direct Jetson camera owner
 
-## Yahboom assets search result
+## Yahboom adaptation
 
-The repository and local robot code did **not** contain Yahboom blocked/free model assets, TensorRT engines, ResNet18 checkpoints, or reusable automatic-avoidance notebooks/scripts.
+The service is now adapted to the Yahboom "Automatic avoid" object-detection flow:
 
-Because no model files were present, the service loads the blocked/free model only from a configurable path:
+- TensorFlow frozen graph (`frozen_inference_graph.pb`)
+- COCO label map (`mscoco_label_map.pbtxt`, optional but recommended)
+- MJPEG frames consumed from `video_bridge` (`http://127.0.0.1:5001/video_feed`)
+
+Default inference mode:
 
 ```text
-AVOIDANCE_MODEL_PATH=/absolute/path/to/blocked_free_model.pth
+AVOIDANCE_INFERENCE_MODE=object_detection
 ```
 
-If the model file is missing or cannot be loaded, `/status` and `/health` report that failure and autonomous driving does not start.
+If the configured detection graph is missing or cannot be loaded, `/status` and `/health` report the failure and autonomous driving does not start.
 
 ## Control modes
 
@@ -121,8 +125,16 @@ JETSON_REQUEST_TIMEOUT_MS=5000
 WEB_BRIDGE_URL=http://127.0.0.1:5000
 VIDEO_STREAM_URL=http://127.0.0.1:5001/video_feed
 AVOIDANCE_PORT=5003
-AVOIDANCE_MODEL_PATH=/absolute/path/to/blocked_free_model.pth
-AVOIDANCE_MODEL_DEVICE=cpu
+AVOIDANCE_INFERENCE_MODE=object_detection
+AVOIDANCE_DETECTION_MODEL_PATH=/absolute/path/to/frozen_inference_graph.pb
+AVOIDANCE_LABEL_MAP_PATH=/absolute/path/to/mscoco_label_map.pbtxt
+AVOIDANCE_DETECTION_MIN_SCORE=0.5
+AVOIDANCE_OBSTACLE_CLASS_IDS=1,2,3,4,6,8,13,14,15,16,17,18,19,20,21,44,47,51,62,64,67,72,73,77,78,79,80,81,82,84,85,86,87,88,89,90
+AVOIDANCE_OBSTACLE_MIN_BOX_AREA=0.04
+AVOIDANCE_OBSTACLE_CENTER_X_MIN=0.25
+AVOIDANCE_OBSTACLE_CENTER_X_MAX=0.75
+AVOIDANCE_OBSTACLE_CENTER_Y_MIN=0.20
+AVOIDANCE_OBSTACLE_CENTER_Y_MAX=1.00
 AVOIDANCE_BLOCKED_THRESHOLD=0.75
 AVOIDANCE_BLOCKED_CONFIRMATION_FRAMES=3
 AVOIDANCE_FORWARD_SPEED=0.35
@@ -137,6 +149,14 @@ AVOIDANCE_STREAM_TIMEOUT_SECONDS=5
 AVOIDANCE_STREAM_RETRY_DELAY_SECONDS=0.5
 AVOIDANCE_LOOP_SLEEP_SECONDS=0.05
 AVOIDANCE_FORWARD_REFRESH_SECONDS=1.0
+```
+
+Legacy compatibility mode is still available if you later provide a Yahboom blocked/free classifier:
+
+```text
+AVOIDANCE_INFERENCE_MODE=blocked_free
+AVOIDANCE_MODEL_PATH=/absolute/path/to/blocked_free_model.pth
+AVOIDANCE_MODEL_DEVICE=cpu
 ```
 
 ## Install and run
@@ -189,6 +209,7 @@ sudo systemctl status obstacle-avoidance-bridge.service
 ```
 
 The service starts in a safe idle state. It does **not** start robot motion on boot.
+The shipped service file sources ROS (`/opt/ros/melodic/setup.bash`) and, if present, `/home/jetson/workspace/catkin_ws/devel/setup.bash` before launching Python.
 
 ## Physical-robot validation steps
 
@@ -198,11 +219,11 @@ These steps require the JetBot Mini:
 2. Switch to `auto` and confirm joystick requests receive `409` while stop still works.
 3. Verify the robot starts from a stop, drives forward, and avoids a visible obstacle.
 4. Disconnect the video bridge and confirm the robot stops and reports stream failure.
-5. Temporarily point `AVOIDANCE_MODEL_PATH` at a missing file and confirm start is rejected.
+5. Temporarily point `AVOIDANCE_DETECTION_MODEL_PATH` at a missing file and confirm start is rejected.
 
 ## Safety limitations
 
-This is **camera-based blocked/free avoidance only**. It is not equivalent to LiDAR, ultrasonic, ToF, SLAM, mapping, or navigation.
+This is **camera-based object-detection avoidance only**. It is not equivalent to LiDAR, ultrasonic, ToF, SLAM, mapping, or navigation.
 
 Known limitations:
 
@@ -212,4 +233,4 @@ Known limitations:
 - unusual wall/floor textures
 - stairs and drop-offs
 - camera latency
-- model quality depends on the blocked/free checkpoint provided on the Jetson
+- model quality depends on the object-detection model provided on the Jetson

@@ -11,8 +11,10 @@ Environment=PYTHONUNBUFFERED=1
 Environment=WEB_BRIDGE_URL=http://127.0.0.1:5000
 Environment=VIDEO_STREAM_URL=http://127.0.0.1:5001/video_feed
 Environment=AVOIDANCE_PORT=5003
+Environment=ROS_SETUP_FILE=/opt/ros/melodic/setup.bash
+Environment=CATKIN_SETUP_FILE=/home/jetson/workspace/catkin_ws/devel/setup.bash
 EnvironmentFile=-/home/jetson/projects/SentryX/robot/.env
-ExecStart=/usr/bin/env python3 /home/jetson/projects/SentryX/robot/jetson_bridge/scripts/obstacle_avoidance_bridge.py
+ExecStart=/bin/bash -lc 'source "$ROS_SETUP_FILE" && if [ -f "$CATKIN_SETUP_FILE" ]; then source "$CATKIN_SETUP_FILE"; fi && exec /usr/bin/env python3 /home/jetson/projects/SentryX/robot/jetson_bridge/scripts/obstacle_avoidance_bridge.py'
 Restart=on-failure
 RestartSec=2
 

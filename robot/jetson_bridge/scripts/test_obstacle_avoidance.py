@@ -24,6 +24,7 @@ from jetson_bridge.avoidance import (
     STATE_ERROR,
     STATE_FORWARD,
     STATE_IDLE,
+    compute_blocked_probability_from_detections,
 )
 
 
@@ -220,6 +221,40 @@ class ObstacleAvoidanceControllerTests(unittest.TestCase):
 
         self.assertFalse(status["enabled"])
         self.assertEqual(status["state"], STATE_IDLE)
+
+
+class DetectionDecisionTests(unittest.TestCase):
+    def test_centered_large_obstacle_counts_as_blocked(self):
+        blocked_probability = compute_blocked_probability_from_detections(
+            boxes=np.array([[0.20, 0.30, 0.90, 0.80]], dtype=np.float32),
+            scores=np.array([0.88], dtype=np.float32),
+            classes=np.array([1.0], dtype=np.float32),
+            num_detections=1,
+            detection_min_score=0.5,
+            obstacle_class_ids={1},
+            obstacle_min_box_area=0.04,
+            center_x_min=0.25,
+            center_x_max=0.75,
+            center_y_min=0.20,
+            center_y_max=1.00,
+        )
+        self.assertAlmostEqual(blocked_probability, 0.88, places=5)
+
+    def test_side_obstacle_is_ignored(self):
+        blocked_probability = compute_blocked_probability_from_detections(
+            boxes=np.array([[0.20, 0.00, 0.90, 0.20]], dtype=np.float32),
+            scores=np.array([0.95], dtype=np.float32),
+            classes=np.array([1.0], dtype=np.float32),
+            num_detections=1,
+            detection_min_score=0.5,
+            obstacle_class_ids={1},
+            obstacle_min_box_area=0.04,
+            center_x_min=0.25,
+            center_x_max=0.75,
+            center_y_min=0.20,
+            center_y_max=1.00,
+        )
+        self.assertEqual(blocked_probability, 0.0)
 
 
 if __name__ == "__main__":

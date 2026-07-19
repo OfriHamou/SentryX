@@ -18,9 +18,9 @@ from jetbotmini_msgs.srv import Motor
 
 from jetson_bridge.avoidance import (
     AvoidanceConfig,
-    ConfigurableBlockedFreeClassifier,
     MjpegStreamClient,
     ObstacleAvoidanceController,
+    create_classifier,
 )
 from jetson_bridge.motor_control import MotorController
 
@@ -82,12 +82,7 @@ rospy.init_node("obstacle_avoidance_bridge", anonymous=True)
 ros_motor_client = RosMotorServiceClient()
 controller = ObstacleAvoidanceController(
     motor_controller=MotorController(ros_motor_client),
-    classifier=ConfigurableBlockedFreeClassifier(
-        model_path=CONFIG.model_path,
-        device=CONFIG.model_device,
-        blocked_class_index=CONFIG.blocked_class_index,
-        free_class_index=CONFIG.free_class_index,
-    ),
+    classifier=create_classifier(CONFIG),
     stream_client=MjpegStreamClient(CONFIG.video_stream_url, CONFIG.mjpeg_timeout_seconds),
     control_mode_getter=get_control_mode,
     motor_health_checker=ros_motor_client.is_available,

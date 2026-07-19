@@ -5,7 +5,7 @@ import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Set
 
 import cv2
 import numpy as np
@@ -56,6 +56,16 @@ class AvoidanceConfig:
         model_device=None,
         blocked_class_index=None,
         free_class_index=None,
+        inference_mode=None,
+        detection_model_path=None,
+        detection_label_map_path=None,
+        detection_min_score=None,
+        obstacle_class_ids=None,
+        obstacle_min_box_area=None,
+        obstacle_center_x_min=None,
+        obstacle_center_x_max=None,
+        obstacle_center_y_min=None,
+        obstacle_center_y_max=None,
     ):
         self.video_stream_url = video_stream_url or os.environ.get("VIDEO_STREAM_URL", "http://127.0.0.1:5001/video_feed")
         self.blocked_threshold = float(
@@ -117,6 +127,70 @@ class AvoidanceConfig:
         self.free_class_index = int(
             free_class_index if free_class_index is not None else os.environ.get("AVOIDANCE_FREE_CLASS_INDEX", "1")
         )
+        self.inference_mode = (
+            inference_mode if inference_mode is not None else os.environ.get("AVOIDANCE_INFERENCE_MODE", "object_detection")
+        ).strip().lower() or "object_detection"
+        self.detection_model_path = (
+            detection_model_path
+            if detection_model_path is not None
+            else os.environ.get("AVOIDANCE_DETECTION_MODEL_PATH", self.model_path)
+        ).strip()
+        self.detection_label_map_path = (
+            detection_label_map_path
+            if detection_label_map_path is not None
+            else os.environ.get("AVOIDANCE_LABEL_MAP_PATH", "")
+        ).strip()
+        self.detection_min_score = float(
+            detection_min_score if detection_min_score is not None else os.environ.get("AVOIDANCE_DETECTION_MIN_SCORE", "0.5")
+        )
+        self.obstacle_min_box_area = float(
+            obstacle_min_box_area
+            if obstacle_min_box_area is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_MIN_BOX_AREA", "0.04")
+        )
+        self.obstacle_center_x_min = float(
+            obstacle_center_x_min
+            if obstacle_center_x_min is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_CENTER_X_MIN", "0.25")
+        )
+        self.obstacle_center_x_max = float(
+            obstacle_center_x_max
+            if obstacle_center_x_max is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_CENTER_X_MAX", "0.75")
+        )
+        self.obstacle_center_y_min = float(
+            obstacle_center_y_min
+            if obstacle_center_y_min is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_CENTER_Y_MIN", "0.20")
+        )
+        self.obstacle_center_y_max = float(
+            obstacle_center_y_max
+            if obstacle_center_y_max is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_CENTER_Y_MAX", "1.00")
+        )
+        default_obstacle_classes = "1,2,3,4,6,8,13,14,15,16,17,18,19,20,21,44,47,51,62,64,67,72,73,77,78,79,80,81,82,84,85,86,87,88,89,90"
+        obstacle_class_ids_value = (
+            obstacle_class_ids
+            if obstacle_class_ids is not None
+            else os.environ.get("AVOIDANCE_OBSTACLE_CLASS_IDS", default_obstacle_classes)
+        )
+        self.obstacle_class_ids = parse_int_set(obstacle_class_ids_value)
+
+
+def parse_int_set(value) -> Set[int]:
+    if value is None:
+        return set()
+    if isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        values = str(value).split(",")
+    parsed = set()
+    for raw in values:
+        token = str(raw).strip()
+        if not token:
+            continue
+        parsed.add(int(token))
+    return parsed
 
 
 class MjpegStreamClient:
@@ -287,6 +361,207 @@ class ConfigurableBlockedFreeClassifier:
         }
 
 
+def compute_blocked_probability_from_detections(
+    boxes,
+    scores,
+    classes,
+    num_detections: int,
+    detection_min_score: float,
+    obstacle_class_ids: Set[int],
+    obstacle_min_box_area: float,
+    center_x_min: float,
+    center_x_max: float,
+    center_y_min: float,
+    center_y_max: float,
+) -> float:
+    blocked_probability = 0.0
+    valid_count = min(num_detections, len(boxes), len(scores), len(classes))
+    for index in range(valid_count):
+        score = float(scores[index])
+        if score < detection_min_score:
+            continue
+
+        class_id = int(classes[index])
+        if obstacle_class_ids and class_id not in obstacle_class_ids:
+            continue
+
+        ymin, xmin, ymax, xmax = [float(value) for value in boxes[index]]
+        width = max(0.0, xmax - xmin)
+        height = max(0.0, ymax - ymin)
+        if width * height < obstacle_min_box_area:
+            continue
+
+        center_x = xmin + width * 0.5
+        center_y = ymin + height * 0.5
+        if center_x < center_x_min or center_x > center_x_max:
+            continue
+        if center_y < center_y_min or center_y > center_y_max:
+            continue
+
+        blocked_probability = max(blocked_probability, score)
+    return blocked_probability
+
+
+class TensorflowObjectDetectionClassifier:
+    def __init__(
+        self,
+        model_path: str,
+        label_map_path: str,
+        detection_min_score: float,
+        obstacle_class_ids: Set[int],
+        obstacle_min_box_area: float,
+        obstacle_center_x_min: float,
+        obstacle_center_x_max: float,
+        obstacle_center_y_min: float,
+        obstacle_center_y_max: float,
+    ):
+        self.model_path = model_path
+        self.label_map_path = label_map_path
+        self.detection_min_score = detection_min_score
+        self.obstacle_class_ids = set(obstacle_class_ids)
+        self.obstacle_min_box_area = obstacle_min_box_area
+        self.obstacle_center_x_min = obstacle_center_x_min
+        self.obstacle_center_x_max = obstacle_center_x_max
+        self.obstacle_center_y_min = obstacle_center_y_min
+        self.obstacle_center_y_max = obstacle_center_y_max
+        self.load_error: Optional[str] = None
+        self._tf = None
+        self._session = None
+        self._graph = None
+        self._input_tensor = None
+        self._boxes_tensor = None
+        self._scores_tensor = None
+        self._classes_tensor = None
+        self._num_tensor = None
+        self._loaded_model_path: Optional[str] = None
+        self.ensure_loaded()
+
+    def ensure_loaded(self) -> bool:
+        if self._session is not None and self._loaded_model_path == self.model_path:
+            return True
+
+        self._close_session()
+        self._tf = None
+
+        if not self.model_path:
+            self.load_error = "AVOIDANCE_DETECTION_MODEL_PATH is not configured"
+            return False
+        if not os.path.isfile(self.model_path):
+            self.load_error = "Detection model file not found at {}".format(self.model_path)
+            return False
+
+        try:
+            import tensorflow as tf
+        except Exception as error:
+            self.load_error = "TensorFlow is not available: {}".format(error)
+            return False
+
+        try:
+            tf.compat.v1.disable_eager_execution()
+            graph = tf.Graph()
+            graph_def = tf.compat.v1.GraphDef()
+            with tf.io.gfile.GFile(self.model_path, "rb") as model_file:
+                graph_def.ParseFromString(model_file.read())
+            with graph.as_default():
+                tf.import_graph_def(graph_def, name="")
+
+            self._input_tensor = graph.get_tensor_by_name("image_tensor:0")
+            self._boxes_tensor = graph.get_tensor_by_name("detection_boxes:0")
+            self._scores_tensor = graph.get_tensor_by_name("detection_scores:0")
+            self._classes_tensor = graph.get_tensor_by_name("detection_classes:0")
+            self._num_tensor = graph.get_tensor_by_name("num_detections:0")
+            self._session = tf.compat.v1.Session(graph=graph)
+            self._graph = graph
+            self._tf = tf
+            self._loaded_model_path = self.model_path
+            self.load_error = None
+            LOGGER.info("Loaded TensorFlow detection model from %s", self.model_path)
+            return True
+        except Exception as error:
+            self._close_session()
+            self._tf = None
+            self.load_error = "Failed to load TensorFlow model: {}".format(error)
+            LOGGER.error(self.load_error)
+            return False
+
+    def _close_session(self):
+        if self._session is not None:
+            try:
+                self._session.close()
+            except Exception:
+                pass
+        self._session = None
+        self._graph = None
+        self._input_tensor = None
+        self._boxes_tensor = None
+        self._scores_tensor = None
+        self._classes_tensor = None
+        self._num_tensor = None
+
+    def is_loaded(self) -> bool:
+        return self._session is not None
+
+    def predict(self, frame) -> Dict[str, float]:
+        if not self.ensure_loaded():
+            raise RuntimeError(self.load_error or "Detection model is not loaded")
+        assert self._session is not None
+        assert self._input_tensor is not None
+        assert self._boxes_tensor is not None
+        assert self._scores_tensor is not None
+        assert self._classes_tensor is not None
+        assert self._num_tensor is not None
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        input_batch = np.expand_dims(rgb, axis=0)
+        boxes, scores, classes, num_detections = self._session.run(
+            [self._boxes_tensor, self._scores_tensor, self._classes_tensor, self._num_tensor],
+            feed_dict={self._input_tensor: input_batch},
+        )
+
+        count = int(num_detections[0]) if len(num_detections) > 0 else 0
+        blocked_probability = compute_blocked_probability_from_detections(
+            boxes=boxes[0],
+            scores=scores[0],
+            classes=classes[0],
+            num_detections=count,
+            detection_min_score=self.detection_min_score,
+            obstacle_class_ids=self.obstacle_class_ids,
+            obstacle_min_box_area=self.obstacle_min_box_area,
+            center_x_min=self.obstacle_center_x_min,
+            center_x_max=self.obstacle_center_x_max,
+            center_y_min=self.obstacle_center_y_min,
+            center_y_max=self.obstacle_center_y_max,
+        )
+        free_probability = max(0.0, 1.0 - blocked_probability)
+        return {
+            "blocked_probability": blocked_probability,
+            "free_probability": free_probability,
+        }
+
+
+def create_classifier(config: AvoidanceConfig):
+    if config.inference_mode == "blocked_free":
+        return ConfigurableBlockedFreeClassifier(
+            model_path=config.model_path,
+            device=config.model_device,
+            blocked_class_index=config.blocked_class_index,
+            free_class_index=config.free_class_index,
+        )
+    if config.inference_mode == "object_detection":
+        return TensorflowObjectDetectionClassifier(
+            model_path=config.detection_model_path,
+            label_map_path=config.detection_label_map_path,
+            detection_min_score=config.detection_min_score,
+            obstacle_class_ids=config.obstacle_class_ids,
+            obstacle_min_box_area=config.obstacle_min_box_area,
+            obstacle_center_x_min=config.obstacle_center_x_min,
+            obstacle_center_x_max=config.obstacle_center_x_max,
+            obstacle_center_y_min=config.obstacle_center_y_min,
+            obstacle_center_y_max=config.obstacle_center_y_max,
+        )
+    raise RuntimeError("Unsupported AVOIDANCE_INFERENCE_MODE: {}".format(config.inference_mode))
+
+
 class ObstacleAvoidanceController:
     def __init__(
         self,
@@ -325,6 +600,7 @@ class ObstacleAvoidanceController:
             "last_turn_direction": None,
             "stream_connected": False,
             "model_loaded": bool(getattr(self.classifier, "is_loaded", lambda: False)()),
+            "inference_mode": str(getattr(self.config, "inference_mode", "object_detection")).upper(),
             "last_frame_time": None,
             "error": getattr(self.classifier, "load_error", None),
         }
@@ -446,7 +722,7 @@ class ObstacleAvoidanceController:
             raise RuntimeError("ROS motor service is unavailable")
 
         if not self.classifier.ensure_loaded():
-            raise RuntimeError(getattr(self.classifier, "load_error", "Blocked/free model is unavailable"))
+            raise RuntimeError(getattr(self.classifier, "load_error", "Avoidance model is unavailable"))
 
         frame = self.stream_client.get_frame()
         with self.state_lock:
@@ -564,7 +840,7 @@ class ObstacleAvoidanceController:
         self.stream_client.close()
 
     def _handle_inference_failure(self, error: Exception):
-        LOGGER.error("Blocked/free inference failed: %s", error)
+        LOGGER.error("Avoidance inference failed: %s", error)
         try:
             self._stop_robot()
         except Exception as stop_error:
