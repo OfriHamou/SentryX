@@ -7,9 +7,11 @@ import { hasAccess } from "../middleware/permission";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+router.get("/by-robot/:robotId", FaceController.getFacesForRobot);
+router.get("/visitor-images/:id", FaceController.getVisitorImageForRobot);
+
 router.get("/", isLoggedIn, hasAccess("faces", "read"), FaceController.listFaces);
 router.get("/:id/images/:filename", FaceController.getImage); // unauthenticated (img-friendly)
-router.get("/by-robot/:robotId", isLoggedIn, hasAccess("faces", "read"), FaceController.getFacesForRobot);
 
 router.post("/", isLoggedIn, hasAccess("faces", "write"), upload.array("photos"), FaceController.addFace);
 router.post("/:id/images", isLoggedIn, hasAccess("faces", "write"), upload.array("photos"), FaceController.addImages);
