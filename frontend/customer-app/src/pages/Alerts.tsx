@@ -1,61 +1,242 @@
-import { useState } from 'react';
-import { Box, Paper, Typography, Stack, Button, Select, MenuItem, TextField, FormControl } from '@mui/material';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    Alert as MuiAlert,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Divider,
+    FormControl,
+    MenuItem,
+    Paper,
+    Select,
+    Stack,
+    TextField,
+    Typography,
+} from '@mui/material';
 import AlertCard from '../components/alerts/AlertCard';
-import { useEvents } from '../hooks/robot/useEvents';
-import { useRobot } from '../hooks/robot/useRobot';
+import { getAlert, getAlerts, updateAlertStatus } from '../api/alerts';
+import { eventDbImageUrl } from '../api/robot';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
+import type { Alert, AlertsResponse, AlertStatus, AlertStatusFilter } from '../types/alert';
 
-type StatusFilter = 'all' | 'active' | 'resolved';
 type TimeRange = '24h' | 'week' | 'month' | 'custom';
 
-const RANGE_MS: Record<'24h' | 'week' | 'month', number> = {
+const PAGE_SIZE = 50;
+const ALERT_POLL_INTERVAL_MS = 5_000;
+const RANGE_MS: Record<Exclude<TimeRange, 'custom'>, number> = {
     '24h': 24 * 60 * 60 * 1000,
     week: 7 * 24 * 60 * 60 * 1000,
     month: 30 * 24 * 60 * 60 * 1000,
 };
-const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getDateRange(timeRange: TimeRange, customFrom: string, customTo: string) {
+    if (timeRange !== 'custom') {
+        const to = new Date();
+        return {
+            from: new Date(to.getTime() - RANGE_MS[timeRange]).toISOString(),
+            to: to.toISOString(),
+            valid: true,
+        };
+    }
+
+    const fromDate = customFrom ? new Date(`${customFrom}T00:00:00`) : undefined;
+    const toDate = customTo ? new Date(`${customTo}T23:59:59.999`) : undefined;
+    return {
+        from: fromDate?.toISOString(),
+        to: toDate?.toISOString(),
+        valid: !fromDate || !toDate || fromDate <= toDate,
+    };
+}
+
+function formatDate(value: string | null | undefined): string {
+    return value ? new Date(value).toLocaleString() : 'Not available';
+}
+
+function readableEventType(eventType: string): string {
+    const readable = eventType.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+    return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : 'Unknown event';
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ py: 0.75 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 150 }}>{label}</Typography>
+            <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{value}</Typography>
+        </Stack>
+    );
+}
 
 export default function Alerts() {
     const { user } = useCustomerAuth();
-    const { data: events } = useEvents();
-    const { data: robot } = useRobot();
-    const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
-    const [status, setStatus] = useState<StatusFilter>('all');
+    const [status, setStatus] = useState<AlertStatusFilter>('all');
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
+    const [offset, setOffset] = useState(0);
+    const [reloadVersion, setReloadVersion] = useState(0);
+    const [response, setResponse] = useState<AlertsResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [backgroundError, setBackgroundError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [updatingId, setUpdatingId] = useState<string | null>(null);
+    const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [detailsError, setDetailsError] = useState<string | null>(null);
+    const [imageLoadFailed, setImageLoadFailed] = useState(false);
+    const detailsRequestId = useRef(0);
+    const hasAlertData = useRef(false);
     const canWriteAlerts = hasCustomerPermission(user?.allowedPages, 'alerts', 'write');
 
-    const location = robot?.location ?? '—';
-    const isResolved = (id: string) => resolvedIds.has(id);
-    const markResolved = (id: string) => setResolvedIds((prev) => new Set(prev).add(id));
+    const range = useMemo(
+        () => getDateRange(timeRange, customFrom, customTo),
+        [timeRange, customFrom, customTo],
+    );
 
-    const inTimeRange = (ts: string) => {
-        const t = new Date(ts).getTime();
-        if (timeRange === 'custom') {
-            const from = customFrom ? new Date(customFrom).getTime() : -Infinity;
-            const to = customTo ? new Date(customTo).getTime() + DAY_MS : Infinity; // include the whole "to" day
-            return t >= from && t <= to;
-        }
-        return t >= Date.now() - RANGE_MS[timeRange];
+    const prepareForRequest = useCallback(() => {
+        hasAlertData.current = false;
+        setResponse(null);
+        setError(null);
+        setBackgroundError(null);
+        setLoading(true);
+    }, []);
+
+    const refreshInBackground = useCallback(() => {
+        setReloadVersion((version) => version + 1);
+    }, []);
+
+    const retryInitialLoad = useCallback(() => {
+        prepareForRequest();
+        setReloadVersion((version) => version + 1);
+    }, [prepareForRequest]);
+
+    useEffect(() => {
+        if (!range.valid) return;
+
+        let active = true;
+        let requestInFlight = false;
+        let controller: AbortController | null = null;
+
+        const loadAlerts = async () => {
+            if (requestInFlight) return;
+
+            requestInFlight = true;
+            const isBackgroundRefresh = hasAlertData.current;
+            controller = new AbortController();
+            const requestRange = getDateRange(timeRange, customFrom, customTo);
+
+            try {
+                const nextResponse = await getAlerts({
+                    status,
+                    from: requestRange.from,
+                    to: requestRange.to,
+                    limit: PAGE_SIZE,
+                    offset,
+                }, controller.signal);
+
+                if (active) {
+                    hasAlertData.current = true;
+                    setResponse(nextResponse);
+                    setError(null);
+                    setBackgroundError(null);
+                }
+            } catch (requestError: unknown) {
+                if (active && !controller.signal.aborted) {
+                    const message = requestError instanceof Error ? requestError.message : 'Failed to load alerts';
+                    if (isBackgroundRefresh) {
+                        setBackgroundError(message);
+                    } else {
+                        setError(message);
+                    }
+                }
+            } finally {
+                if (active && !isBackgroundRefresh) setLoading(false);
+                requestInFlight = false;
+            }
+        };
+
+        void loadAlerts();
+        const intervalId = window.setInterval(() => void loadAlerts(), ALERT_POLL_INTERVAL_MS);
+
+        return () => {
+            active = false;
+            window.clearInterval(intervalId);
+            controller?.abort();
+        };
+    }, [customFrom, customTo, offset, range.valid, reloadVersion, status, timeRange]);
+
+    const changeStatus = (nextStatus: AlertStatusFilter) => {
+        prepareForRequest();
+        setOffset(0);
+        setStatus(nextStatus);
     };
 
-    // alerts within the selected time range (status counts reflect this too)
-    const timeAlerts = (events ?? []).filter((e) => e.is_alert && inTimeRange(e.timestamp));
-    const activeCount = timeAlerts.filter((a) => !isResolved(a.id)).length;
-    const resolvedCount = timeAlerts.filter((a) => isResolved(a.id)).length;
+    const changeTimeRange = (nextRange: TimeRange) => {
+        prepareForRequest();
+        setOffset(0);
+        setTimeRange(nextRange);
+    };
 
-    const visible = timeAlerts.filter((a) => {
-        if (status === 'active') return !isResolved(a.id);
-        if (status === 'resolved') return isResolved(a.id);
-        return true;
-    });
+    const changeAlertStatus = async (
+        alert: Alert,
+        nextStatus: Extract<AlertStatus, 'IN_PROGRESS' | 'RESOLVED'>,
+    ) => {
+        if (!canWriteAlerts) return;
+        setUpdatingId(alert.id);
+        setActionError(null);
+        try {
+            const updated = await updateAlertStatus(alert.id, { status: nextStatus });
+            if (selectedAlert?.id === updated.id) setSelectedAlert(updated);
+            refreshInBackground();
+        } catch (requestError) {
+            setActionError(requestError instanceof Error ? requestError.message : 'Failed to update alert');
+        } finally {
+            setUpdatingId(null);
+        }
+    };
 
-    const tabs: { key: StatusFilter; label: string; count: number }[] = [
-        { key: 'all', label: 'All', count: timeAlerts.length },
-        { key: 'active', label: 'Active', count: activeCount },
-        { key: 'resolved', label: 'Resolved', count: resolvedCount },
+    const openDetails = async (alert: Alert) => {
+        const requestId = ++detailsRequestId.current;
+        setSelectedAlert(alert);
+        setDetailsLoading(true);
+        setDetailsError(null);
+        setImageLoadFailed(false);
+        try {
+            const fullAlert = await getAlert(alert.id);
+            if (detailsRequestId.current === requestId) setSelectedAlert(fullAlert);
+        } catch (requestError) {
+            if (detailsRequestId.current === requestId) {
+                setDetailsError(requestError instanceof Error ? requestError.message : 'Failed to load alert details');
+            }
+        } finally {
+            if (detailsRequestId.current === requestId) setDetailsLoading(false);
+        }
+    };
+
+    const closeDetails = () => {
+        detailsRequestId.current += 1;
+        setSelectedAlert(null);
+        setDetailsError(null);
+        setDetailsLoading(false);
+        setImageLoadFailed(false);
+    };
+
+    const counts = response?.counts ?? { all: 0, active: 0, resolved: 0 };
+    const tabs: { key: AlertStatusFilter; label: string; count: number }[] = [
+        { key: 'all', label: 'All', count: counts.all },
+        { key: 'active', label: 'Active', count: counts.active },
+        { key: 'resolved', label: 'Resolved', count: counts.resolved },
     ];
+    const alerts = response?.alerts ?? [];
+    const pagination = response?.pagination;
+    const hasPrevious = offset > 0;
+    const hasNext = Boolean(pagination && pagination.offset + alerts.length < pagination.total);
+    const rangeError = range.valid ? null : 'The From date must be before the To date.';
 
     return (
         <Box>
@@ -64,25 +245,23 @@ export default function Alerts() {
 
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}
                     sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-                    {/* status tabs */}
-                    <Stack direction="row" spacing={1.5}>
-                        {tabs.map((t) => (
-                            <Button key={t.key} onClick={() => setStatus(t.key)} disableElevation
+                    <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                        {tabs.map((tab) => (
+                            <Button key={tab.key} onClick={() => changeStatus(tab.key)} disableElevation
                                 sx={{
                                     textTransform: 'none', borderRadius: 2, px: 2.5, fontWeight: 700,
-                                    bgcolor: status === t.key ? '#fff' : 'transparent',
-                                    color: status === t.key ? 'text.primary' : 'text.secondary',
-                                    boxShadow: status === t.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                                    '&:hover': { bgcolor: status === t.key ? '#fff' : 'rgba(255,255,255,0.5)' },
+                                    bgcolor: status === tab.key ? '#fff' : 'transparent',
+                                    color: status === tab.key ? 'text.primary' : 'text.secondary',
+                                    boxShadow: status === tab.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                                    '&:hover': { bgcolor: status === tab.key ? '#fff' : 'rgba(255,255,255,0.5)' },
                                 }}>
-                                {t.label} ({t.count})
+                                {tab.label} ({tab.count})
                             </Button>
                         ))}
                     </Stack>
 
-                    {/* time range */}
                     <FormControl size="small" sx={{ minWidth: 170 }}>
-                        <Select value={timeRange} onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+                        <Select value={timeRange} onChange={(event) => changeTimeRange(event.target.value as TimeRange)}
                             sx={{ bgcolor: '#fff', borderRadius: 2 }}>
                             <MenuItem value="24h">Last 24 hours</MenuItem>
                             <MenuItem value="week">Last week</MenuItem>
@@ -92,29 +271,182 @@ export default function Alerts() {
                     </FormControl>
                 </Stack>
 
-                {/* custom date range */}
                 {timeRange === 'custom' && (
-                    <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mt: 2 }}>
                         <TextField type="date" size="small" label="From" value={customFrom}
-                            onChange={(e) => setCustomFrom(e.target.value)}
+                            onChange={(event) => { prepareForRequest(); setOffset(0); setCustomFrom(event.target.value); }}
                             slotProps={{ inputLabel: { shrink: true } }} sx={{ bgcolor: '#fff', borderRadius: 2 }} />
                         <TextField type="date" size="small" label="To" value={customTo}
-                            onChange={(e) => setCustomTo(e.target.value)}
+                            onChange={(event) => { prepareForRequest(); setOffset(0); setCustomTo(event.target.value); }}
                             slotProps={{ inputLabel: { shrink: true } }} sx={{ bgcolor: '#fff', borderRadius: 2 }} />
                     </Stack>
                 )}
             </Paper>
 
-            {visible.length === 0 ? (
-                <Typography color="text.secondary">No alerts</Typography>
-            ) : (
-                <Stack spacing={2}>
-                    {visible.map((e) => (
-                        <AlertCard key={e.id} event={e} location={location}
-                            resolved={isResolved(e.id)} onResolve={() => markResolved(e.id)} canResolve={canWriteAlerts} />
-                    ))}
-                </Stack>
+            {actionError && (
+                <MuiAlert severity="error" onClose={() => setActionError(null)} sx={{ mb: 2 }}>
+                    {actionError}
+                </MuiAlert>
             )}
+
+            {backgroundError && response && (
+                <MuiAlert severity="warning" onClose={() => setBackgroundError(null)} sx={{ mb: 2 }}>
+                    Could not refresh alerts. Showing the latest available data; retrying automatically.
+                </MuiAlert>
+            )}
+
+            {rangeError ? (
+                <MuiAlert severity="error">{rangeError}</MuiAlert>
+            ) : loading ? (
+                <Stack sx={{ py: 6, alignItems: 'center' }} spacing={1.5}>
+                    <CircularProgress size={30} />
+                    <Typography color="text.secondary">Loading alerts…</Typography>
+                </Stack>
+            ) : error ? (
+                <MuiAlert severity="error" action={<Button color="inherit" size="small" onClick={retryInitialLoad}>Retry</Button>}>
+                    {error}
+                </MuiAlert>
+            ) : alerts.length === 0 ? (
+                <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
+                    <Typography color="text.secondary">
+                        {counts.all === 0 ? 'No alerts found for the selected date range.' : 'No alerts matching the current filters.'}
+                    </Typography>
+                    {hasPrevious && (
+                        <Button variant="outlined"
+                            onClick={() => { prepareForRequest(); setOffset((current) => Math.max(0, current - PAGE_SIZE)); }}>
+                            Previous page
+                        </Button>
+                    )}
+                </Stack>
+            ) : (
+                <>
+                    <Stack spacing={2}>
+                        {alerts.map((alert) => (
+                            <AlertCard
+                                key={alert.id}
+                                alert={alert}
+                                canManage={canWriteAlerts}
+                                updating={updatingId === alert.id}
+                                onViewDetails={() => void openDetails(alert)}
+                                onStartHandling={() => void changeAlertStatus(alert, 'IN_PROGRESS')}
+                                onResolve={() => void changeAlertStatus(alert, 'RESOLVED')}
+                            />
+                        ))}
+                    </Stack>
+
+                    {(hasPrevious || hasNext) && (
+                        <Stack direction="row" spacing={1} sx={{ mt: 3, justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                                {offset + 1}–{offset + alerts.length} of {pagination?.total ?? 0}
+                            </Typography>
+                            <Button variant="outlined" disabled={!hasPrevious}
+                                onClick={() => { prepareForRequest(); setOffset((current) => Math.max(0, current - PAGE_SIZE)); }}>Previous</Button>
+                            <Button variant="outlined" disabled={!hasNext}
+                                onClick={() => { prepareForRequest(); setOffset((current) => current + PAGE_SIZE); }}>Next</Button>
+                        </Stack>
+                    )}
+                </>
+            )}
+
+            <Dialog open={Boolean(selectedAlert)} onClose={closeDetails} fullWidth maxWidth="md">
+                <DialogTitle sx={{ fontWeight: 800 }}>
+                    {selectedAlert?.displayTitle || (selectedAlert ? readableEventType(selectedAlert.event.eventType) : 'Alert details')}
+                </DialogTitle>
+                <DialogContent dividers>
+                    {detailsLoading && (
+                        <Stack direction="row" spacing={1.5} sx={{ py: 2, alignItems: 'center' }}>
+                            <CircularProgress size={22} />
+                            <Typography color="text.secondary">Loading full details…</Typography>
+                        </Stack>
+                    )}
+                    {detailsError && <MuiAlert severity="warning" sx={{ mb: 2 }}>{detailsError}</MuiAlert>}
+                    {selectedAlert && (
+                        <Stack spacing={2}>
+                            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+                                <Chip
+                                    label={selectedAlert.status === 'IN_PROGRESS' ? 'In progress' : selectedAlert.status === 'OPEN' ? 'Open' : 'Resolved'}
+                                    color={selectedAlert.status === 'RESOLVED' ? 'success' : selectedAlert.status === 'IN_PROGRESS' ? 'info' : 'warning'}
+                                    size="small"
+                                />
+                                {selectedAlert.assignedUser && (
+                                    <Chip label={`Operator: ${selectedAlert.assignedUser.fullName || selectedAlert.assignedUser.email}`} size="small" />
+                                )}
+                            </Stack>
+
+                            <Box>
+                                <DetailRow label="Event type" value={readableEventType(selectedAlert.event.eventType)} />
+                                <DetailRow label="Alert created" value={formatDate(selectedAlert.createdAt)} />
+                                <DetailRow label="Event timestamp" value={formatDate(selectedAlert.event.createdAt)} />
+                                <DetailRow label="Robot" value={selectedAlert.event.robot?.name || 'Not available'} />
+                                <DetailRow label="Location" value={selectedAlert.event.robot?.location || 'Not available'} />
+                                <DetailRow label="Event processing status" value={selectedAlert.event.status || 'Not available'} />
+                                <DetailRow label="Started handling" value={formatDate(selectedAlert.startedAt)} />
+                                <DetailRow label="Resolved" value={formatDate(selectedAlert.resolvedAt)} />
+                                <DetailRow
+                                    label="Assigned shift"
+                                    value={selectedAlert.assignedShift
+                                        ? `${selectedAlert.assignedShift.name} (${formatDate(selectedAlert.assignedShift.startAt)} – ${formatDate(selectedAlert.assignedShift.endAt)})`
+                                        : 'Not assigned'}
+                                />
+                                <DetailRow label="Resolution notes" value={selectedAlert.resolutionNotes || 'None'} />
+                            </Box>
+
+                            <Divider />
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>Event image</Typography>
+                                {selectedAlert.event.imagePath && !imageLoadFailed ? (
+                                    <Box
+                                        component="img"
+                                        src={eventDbImageUrl(selectedAlert.event.id)}
+                                        alt={selectedAlert.displayTitle || 'Alert event'}
+                                        onError={() => setImageLoadFailed(true)}
+                                        sx={{
+                                            display: 'block',
+                                            width: '100%',
+                                            maxHeight: 420,
+                                            objectFit: 'contain',
+                                            bgcolor: 'grey.100',
+                                            borderRadius: 2,
+                                        }}
+                                    />
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">No event image is available.</Typography>
+                                )}
+                            </Box>
+
+                            {selectedAlert.event.aiMetadata != null && (
+                                <Box>
+                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>AI metadata</Typography>
+                                    <Box component="pre" sx={{
+                                        m: 0,
+                                        p: 2,
+                                        overflow: 'auto',
+                                        maxHeight: 260,
+                                        borderRadius: 2,
+                                        bgcolor: 'grey.100',
+                                        fontSize: 12,
+                                        whiteSpace: 'pre-wrap',
+                                        overflowWrap: 'anywhere',
+                                    }}>
+                                        {JSON.stringify(selectedAlert.event.aiMetadata, null, 2)}
+                                    </Box>
+                                </Box>
+                            )}
+                        </Stack>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    {selectedAlert && canWriteAlerts && selectedAlert.status === 'OPEN' && (
+                        <Button disabled={updatingId === selectedAlert.id}
+                            onClick={() => void changeAlertStatus(selectedAlert, 'IN_PROGRESS')}>Start Handling</Button>
+                    )}
+                    {selectedAlert && canWriteAlerts && selectedAlert.status !== 'RESOLVED' && (
+                        <Button color="success" disabled={updatingId === selectedAlert.id}
+                            onClick={() => void changeAlertStatus(selectedAlert, 'RESOLVED')}>Mark Resolved</Button>
+                    )}
+                    <Button onClick={closeDetails}>Close</Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }
