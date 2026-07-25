@@ -54,5 +54,9 @@ const fallback: EventDisplay = {
 };
 
 export function getEventDisplay(event: RobotEvent): EventDisplay {
-    return registry[event.type] ?? fallback;
+    return getEventDisplayByType(event.type);
+}
+
+export function getEventDisplayByType(eventType: string): EventDisplay {
+    return registry[eventType] ?? fallback;
 }

@@ -68,7 +68,6 @@ interface AdminPageProps {
 
 export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const [activeTab, setActiveTab] = useState('Dashboard');
-    const [alerts, setAlerts] = useState<any[]>([]);
     const { user } = useAuth();
 
     const [tenants, setTenants] = useState<any[]>([]);
@@ -96,15 +95,14 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
 
     useEffect(() => {
         loadData();
-    }, [canReadTenants, canReadLicenses, canReadAlerts]);
+    }, [canReadTenants, canReadLicenses]);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [tenantResult, licenseResult, alertsResult] = await Promise.allSettled([
+            const [tenantResult, licenseResult] = await Promise.allSettled([
                 canReadTenants ? api.getTenants() : Promise.resolve([]),
-                canReadLicenses ? api.getLicenses() : Promise.resolve([]),
-                canReadAlerts ? api.getAlerts() : Promise.resolve([])
+                canReadLicenses ? api.getLicenses() : Promise.resolve([])
             ]);
 
             if (tenantResult.status === 'fulfilled') {
@@ -119,11 +117,6 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                 setAvailableLicenses([]);
             }
 
-            if (alertsResult.status === 'fulfilled') {
-                setAlerts(alertsResult.value || []);
-            } else {
-                setAlerts([]);
-            }
         } catch (error) {
             console.error("Failed to load data", error);
         } finally {
@@ -316,7 +309,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                 { title: 'Total Tenants', val: tenants.length.toString(), subtitle: tenantGrowthText, subtitleColor: tenantGrowthColor, trendIcon: tenantGrowthIcon, icon: <BusinessIcon sx={{ fontSize: 26, color: '#4318FF' }}/>, bg: '#F4F7FE' },
                                 { title: 'Active Robots', val: allRobots.length.toString(), subtitle: robotSubtitle, subtitleColor: robotSubtitleColor, trendIcon: null, icon: <MemoryIcon sx={{ fontSize: 26, color: '#05CD99' }}/>, bg: '#E6F9F5' },
                                 { title: 'Expiring Licenses', val: licensesExpiringSoon.toString(), subtitle: licenseSubtitle, subtitleColor: licenseSubtitleColor, trendIcon: null, icon: <VerifiedUserIcon sx={{ fontSize: 26, color: '#FFCE20' }}/>, bg: '#FFF9E6' },
-                                { title: 'Critical Alerts', val: alerts.length.toString(), subtitle: 'Requires attention', subtitleColor: '#EE5D50', trendIcon: null, icon: <NotificationsIcon sx={{ fontSize: 26, color: '#EE5D50' }}/>, bg: '#FDECEB' }
+                                { title: 'Critical Alerts', val: '—', subtitle: 'Temporarily disabled', subtitleColor: '#A3AED0', trendIcon: null, icon: <NotificationsIcon sx={{ fontSize: 26, color: '#A3AED0' }}/>, bg: '#F4F7FE' }
                             ].map((stat, i) => (
                                 <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={i}>
                                     <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', border: 'none', height: '100%', backgroundColor: '#fff' }}>
@@ -338,15 +331,29 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                             ))}
                         </Grid>
 
-                        {/* Recent Unread Alerts */}
                         <Grid container spacing={3} sx={{ mb: 5 }}>
                             <Grid size={{ xs: 12 }}>
-                                <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', backgroundColor: '#fff', border: 'none' }}>
+                                <Card
+                                    aria-disabled="true"
+                                    sx={{
+                                        borderRadius: '20px',
+                                        boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)',
+                                        backgroundColor: '#fff',
+                                        border: 'none',
+                                        opacity: 0.7,
+                                        pointerEvents: 'none'
+                                    }}
+                                >
                                     <Box sx={{ p: 3, pt: 4, px: 4 }}>
-                                        <Typography variant="h5" sx={{ fontWeight: 700, color: '#2B3674' }}>
-                                            Recent System Alerts
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                            <Typography variant="h5" sx={{ fontWeight: 700, color: '#2B3674' }}>
+                                                Recent System Alerts
+                                            </Typography>
+                                            <Chip label="Disabled" size="small" sx={{ fontWeight: 700 }} />
+                                        </Box>
+                                        <Typography variant="body2" sx={{ color: '#A3AED0', mt: 0.5, fontWeight: 500 }}>
+                                            Admin operational Alerts are temporarily unavailable.
                                         </Typography>
-                                        <Typography variant="body2" sx={{ color: '#A3AED0', mt: 0.5, fontWeight: 500 }}>Unread alerts fetched from /api/alerts</Typography>
                                     </Box>
                                     <TableContainer component={Box} sx={{ px: 2, pb: 2, minHeight: 300 }}>
                                         <Table>
@@ -361,34 +368,21 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                                {alerts.length === 0 ? (
-                                                    <TableRow>
-                                                        <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
-                                                            <NotificationsIcon sx={{ fontSize: 40, color: '#e2e8f0', mb: 1 }} />
-                                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#718096' }}>No active alerts</Typography>
-                                                            <Typography variant="body2" color="#a0aec0">System is running completely optimal.</Typography>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ) : (
-                                                    alerts.map((alert: any, i: number) => (
-                                                        <TableRow key={i} hover sx={{ '& td': { borderBottom: '1px solid #F4F7FE', py: 2 } }}>
-                                                            <TableCell sx={{ color: '#A3AED0', fontWeight: 500 }}>{alert.createdAt ? new Date(alert.createdAt).toLocaleString() : 'N/A'}</TableCell>
-                                                            <TableCell sx={{ color: '#2B3674', fontWeight: 600 }}>{alert.tenantName || alert.tenantId || 'N/A'}</TableCell>
-                                                            <TableCell sx={{ color: '#A3AED0', fontFamily: "'Fira Code', monospace", fontSize: '0.85rem' }}>{alert.robotId || 'N/A'}</TableCell>
-                                                            <TableCell sx={{ color: '#2B3674', fontWeight: 600 }}>{alert.robotName || 'N/A'}</TableCell>
-                                                            <TableCell>
-                                                                <Chip label={alert.severity || 'Low'} size="small" sx={{ fontWeight: 700, backgroundColor: alert.severity === 'Critical' ? '#FDECEB' : '#F4F7FE', color: alert.severity === 'Critical' ? '#EE5D50' : '#4318FF', borderRadius: '8px' }} />
-                                                            </TableCell>
-                                                            <TableCell sx={{ fontWeight: 600, color: '#2B3674' }}>{alert.message}</TableCell>
-                                                        </TableRow>
-                                                    ))
-                                                )}
+                                                <TableRow>
+                                                    <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                                                        <NotificationsIcon sx={{ fontSize: 40, color: '#A3AED0', mb: 1 }} />
+                                                        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#718096' }}>
+                                                            Admin Alerts are temporarily disabled
+                                                        </Typography>
+                                                    </TableCell>
+                                                </TableRow>
                                             </TableBody>
                                         </Table>
                                     </TableContainer>
                                 </Card>
                             </Grid>
                         </Grid>
+
                     </PermissionGate>
                 )}
 

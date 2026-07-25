@@ -134,13 +134,6 @@ export const approveRegistrationRequest = (userId: string) =>
 export const rejectRegistrationRequest = (userId: string, rejectionReason?: string) =>
     api.post(`/auth/admin/registration-requests/${userId}/reject`, { rejectionReason }).then(res => res.data.user);
 
-// Dor comment - we need to implement this.
-export const getAlerts = () => api.get('/alerts').then(res => res.data).catch(() => {
-    // Return empty array if endpoint is not fully implemented on backend yet
-    console.warn("Could not fetch alerts from /api/alerts");
-    return [];
-});
-
 
 export const createLicense = (data: { code: string; description: string }) =>
     api.post('/licenses', data).then(res => res.data);
