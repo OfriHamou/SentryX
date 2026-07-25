@@ -1,6 +1,8 @@
 import React from 'react';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import BadgeIcon from '@mui/icons-material/Badge';
+import HistoryIcon from '@mui/icons-material/History';
 import PeopleIcon from '@mui/icons-material/People';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WorkspacesIcon from '@mui/icons-material/Workspaces';
@@ -29,6 +31,7 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const { user } = useOrganizationAuth();
   const canReadSecurityShifts = hasOrganizationPermission(user?.allowedPages, 'organization_security_shifts', 'read');
+  const canReadVisitors = hasOrganizationPermission(user?.allowedPages, 'organization_visitors', 'read');
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -121,6 +124,32 @@ const Sidebar: React.FC = () => {
                 <ListItemText
                   disableTypography
                   primary={<Typography sx={{ fontWeight: isActive('/security-shifts') ? 700 : 500, fontSize: '0.95rem' }}>Security Shifts</Typography>}
+                />
+              </ListItemButton>
+            </ListItem>
+          )}
+          {canReadVisitors && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton component={RouterLink} to="/visitors" sx={navItemSx(isActive('/visitors') && !isActive('/visitors/history'))}>
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
+                  <BadgeIcon />
+                </ListItemIcon>
+                <ListItemText
+                  disableTypography
+                  primary={<Typography sx={{ fontWeight: isActive('/visitors') && !isActive('/visitors/history') ? 700 : 500, fontSize: '0.95rem' }}>Visitors</Typography>}
+                />
+              </ListItemButton>
+            </ListItem>
+          )}
+          {canReadVisitors && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton component={RouterLink} to="/visitors/history" sx={navItemSx(isActive('/visitors/history'))}>
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
+                  <HistoryIcon />
+                </ListItemIcon>
+                <ListItemText
+                  disableTypography
+                  primary={<Typography sx={{ fontWeight: isActive('/visitors/history') ? 700 : 500, fontSize: '0.95rem' }}>Visitor History</Typography>}
                 />
               </ListItemButton>
             </ListItem>
