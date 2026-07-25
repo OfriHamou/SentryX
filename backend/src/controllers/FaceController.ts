@@ -4,27 +4,10 @@ import fs from "fs";
 import { randomUUID } from "crypto";
 import { AppDataSource } from "../db";
 import { AuthorizedFace } from "../models/AuthorizedFace";
-import { Robot } from "../models/Robot"; 
 import { Tenant } from "../models/Tenant";
+import { Visitor, VisitorStatus } from "../models/Visitor";
 import type { AuthIdentityPayload } from "../auth/types";
-
-const FACES_DIR = process.env.AUTHORIZED_FACES_DIR || path.join(__dirname, "..", "..", "media", "authorized_faces");
-const JETSON_DETECTION_URL = process.env.JETSON_DETECTION_URL;
-
-// fire-and-forget: tell the robot to re-sync now (the poll is the safety net if this fails)
-function notifyRobotFacesChanged() {
-    if (!JETSON_DETECTION_URL) return;
-    try {
-        fetch(`${JETSON_DETECTION_URL}/faces-changed`, { method: "POST" }).catch(() => {});
-    } catch { /* notify must never break the actual operation */ }
-}
-
-function slugify(name: string): string {
-    return name.trim().replace(/[\\/:*?"<>|]/g, "").replace(/\.\.+/g, "").replace(/\s+/g, "-").slice(0, 50) || "face";
-}
-function folderName(face: { name: string; id: string }): string {
-    return `${slugify(face.name)}-${face.id}`;
-}
+import { AUTHORIZED_FACES_DIR, FaceSyncService, authorizedFaceFolderName, slugifyFaceName } from "../services/FaceSyncService";
 
 function getTenantId(res: Response): string | null {
     const auth = res.locals.auth as AuthIdentityPayload | undefined;
@@ -36,6 +19,7 @@ async function resolveFace(req: Request, res: Response): Promise<AuthorizedFace 
     if (!tenantId) return null;
     const face = await AppDataSource.getRepository(AuthorizedFace).findOne({
         where: { id: req.params.id, tenant: { id: tenantId } },
+        relations: ["tenant"],
     });
     if (!face) { res.status(404).json({ ok: false, error: "Not found" }); return null; }
     return face;
@@ -76,7 +60,7 @@ export class FaceController {
             const imageFilenames: string[] = [];
 
             if (files.length > 0) {
-                const dir = path.join(FACES_DIR, `${slugify(name)}-${id}`);
+                const dir = path.join(AUTHORIZED_FACES_DIR, `${slugifyFaceName(name)}-${id}`);
                 fs.mkdirSync(dir, { recursive: true });
                 files.forEach((file, index) => {
                     const ext = path.extname(file.originalname) || ".jpg";
@@ -95,7 +79,7 @@ export class FaceController {
                 tenant: { id: tenantId } as Tenant,
             });
             await repo.save(face);
-            notifyRobotFacesChanged();
+            FaceSyncService.notifyFacesChanged(tenantId);
             return res.status(201).json({ ok: true, face: { id, name: face.name, role: face.role ?? null, images: imageFilenames } });
         } catch (e) {
             console.error("Error creating face:", e);
@@ -107,9 +91,9 @@ export class FaceController {
         const face = await resolveFace(req, res);
         if (!face) return;
         try {
-            fs.rmSync(path.join(FACES_DIR, folderName(face)), { recursive: true, force: true });
+            fs.rmSync(path.join(AUTHORIZED_FACES_DIR, authorizedFaceFolderName(face)), { recursive: true, force: true });
             await AppDataSource.getRepository(AuthorizedFace).remove(face);
-            notifyRobotFacesChanged();
+            FaceSyncService.notifyFacesChanged(face.tenant?.id);
             return res.status(200).json({ ok: true });
         } catch (e) {
             console.error("Error deleting face:", e);
@@ -123,14 +107,14 @@ export class FaceController {
         try {
             const { name, role } = req.body;
             if (typeof name === "string" && name.trim() && name.trim() !== face.name) {
-                const oldDir = path.join(FACES_DIR, folderName(face));
+                const oldDir = path.join(AUTHORIZED_FACES_DIR, authorizedFaceFolderName(face));
                 face.name = name.trim();
-                const newDir = path.join(FACES_DIR, folderName(face));
+                const newDir = path.join(AUTHORIZED_FACES_DIR, authorizedFaceFolderName(face));
                 if (oldDir !== newDir && fs.existsSync(oldDir)) fs.renameSync(oldDir, newDir);
             }
             if (typeof role === "string") face.role = role.trim();
             await AppDataSource.getRepository(AuthorizedFace).save(face);
-            notifyRobotFacesChanged();
+            FaceSyncService.notifyFacesChanged(face.tenant?.id);
             return res.status(200).json({ ok: true, face: { id: face.id, name: face.name, role: face.role ?? null } });
         } catch (e) {
             console.error("Error updating face:", e);
@@ -145,7 +129,7 @@ export class FaceController {
             const files = (req.files as Express.Multer.File[]) ?? [];
             if (!files.length) return res.status(400).json({ ok: false, error: "No photos" });
 
-            const dir = path.join(FACES_DIR, folderName(face));
+            const dir = path.join(AUTHORIZED_FACES_DIR, authorizedFaceFolderName(face));
             fs.mkdirSync(dir, { recursive: true });
             const added = files.map((file) => {
                 const ext = path.extname(file.originalname) || ".jpg";
@@ -155,7 +139,7 @@ export class FaceController {
             });
             face.images = [...(face.images ?? []), ...added];
             await AppDataSource.getRepository(AuthorizedFace).save(face);
-            notifyRobotFacesChanged();
+            FaceSyncService.notifyFacesChanged(face.tenant?.id);
             return res.status(200).json({ ok: true, images: face.images });
         } catch (e) {
             console.error("Error adding images:", e);
@@ -168,11 +152,11 @@ export class FaceController {
         if (!face) return;
         try {
             const filename = path.basename(req.params.filename);
-            const filePath = path.join(FACES_DIR, folderName(face), filename);
+            const filePath = path.join(AUTHORIZED_FACES_DIR, authorizedFaceFolderName(face), filename);
             if (fs.existsSync(filePath)) fs.rmSync(filePath, { force: true });
             face.images = (face.images ?? []).filter((f) => f !== filename);
             await AppDataSource.getRepository(AuthorizedFace).save(face);
-            notifyRobotFacesChanged();
+            FaceSyncService.notifyFacesChanged(face.tenant?.id);
             return res.status(200).json({ ok: true, images: face.images });
         } catch (e) {
             console.error("Error removing image:", e);
@@ -186,7 +170,7 @@ export class FaceController {
             const face = await AppDataSource.getRepository(AuthorizedFace).findOne({ where: { id: req.params.id } });
             if (!face) return res.status(404).json({ ok: false, error: "Not found" });
             const filename = path.basename(req.params.filename);
-            const filePath = path.join(FACES_DIR, folderName(face), filename);
+            const filePath = FaceSyncService.getAuthorizedFaceImagePath(face, filename);
             if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, error: "Image not found" });
             return res.sendFile(filePath);
         } catch (e) {
@@ -198,27 +182,33 @@ export class FaceController {
     // GET /api/faces/by-robot/:robotId — robot-facing (no auth, like /report). Returns the robot's tenant's faces.
     static async getFacesForRobot(req: Request, res: Response) {
         try {
-            const robot = await AppDataSource.getRepository(Robot).findOne({
-                where: { id: req.params.robotId },
-                relations: ["tenant"],
-            });
-            if (!robot?.tenant) return res.status(404).json({ ok: false, error: "Robot/tenant not found" });
+            const faces = await FaceSyncService.getFacesForRobot(req.params.robotId);
+            if (!faces) return res.status(404).json({ ok: false, error: "Robot/tenant not found" });
 
-            const faces = await AppDataSource.getRepository(AuthorizedFace).find({
-                where: { tenant: { id: robot.tenant.id } },
-                order: { addedAt: "DESC" },
-            });
             return res.status(200).json({
                 ok: true,
-                faces: faces.map((f) => ({
-                    id: f.id,
-                    name: f.name,
-                    images: (f.images ?? []).map((fn) => `/api/faces/${f.id}/images/${encodeURIComponent(fn)}`),
-                })),
+                faces,
             });
         } catch (e) {
             console.error("Error fetching faces for robot:", e);
             return res.status(500).json({ ok: false, error: "Failed" });
+        }
+    }
+
+    static async getVisitorImageForRobot(req: Request, res: Response) {
+        try {
+            const visitor = await AppDataSource.getRepository(Visitor).findOne({ where: { id: req.params.id } });
+            if (!visitor) return res.status(404).json({ ok: false, error: "Not found" });
+            const now = new Date();
+            if (visitor.status !== VisitorStatus.ACTIVE || visitor.startAt > now || visitor.endAt <= now) {
+                return res.status(404).json({ ok: false, error: "Not found" });
+            }
+            const filePath = FaceSyncService.getVisitorImagePath(visitor);
+            if (!filePath) return res.status(404).json({ ok: false, error: "Image not found" });
+            return res.sendFile(filePath);
+        } catch (e) {
+            console.error("Error serving visitor face image:", e);
+            return res.status(500).json({ ok: false, error: "Failed to serve image" });
         }
     }
 }
