@@ -9,6 +9,8 @@ import path from "path";
 import { EventController } from "../controllers/EventController"; 
 import { isLoggedIn } from "../middleware/auth";
 import { hasAccess } from "../middleware/permission";
+import { AlertService } from "../services/AlertService";
+import { logger } from "../utils/logger";
 
 const router = Router();
 
@@ -103,12 +105,30 @@ router.post("/report", upload.single("frame"), async (req, res) => {
         await pool.query(insertQuery, [eventId, tenantId, robot_id, event_type, imagePath]);
 
         // Add to BullMQ
-            await eventQueue.add("process-frame", {
-                eventId,
-                imagePath,
-                event_type,
-                metadata: metadata ? JSON.parse(metadata) : {}
-            });
+        await eventQueue.add("process-frame", {
+            eventId,
+            imagePath,
+            event_type,
+            metadata: metadata ? JSON.parse(metadata) : {}
+        });
+
+        if (AlertService.shouldCreateForEventType(event_type)) {
+            try {
+                if (!tenantId) {
+                    throw new Error(`Persisted Event ${eventId} has no tenant and cannot be linked to an Alert`);
+                }
+                await AlertService.createForEvent(eventId, tenantId);
+            } catch (alertError) {
+                console.error(`Failed to create Alert for persisted Event ${eventId}:`, alertError);
+                logger.error("Failed to create Alert for persisted Event", alertError, {
+                    category: "ALERTS",
+                    action: "CREATE_ALERT_FOR_EVENT_FAILED",
+                    status: "FAILED",
+                    context: "eventRoutes.report",
+                    metadata: { eventId, tenantId, eventType: event_type },
+                });
+            }
+        }
 
         // Return 201 Created immediately
         return res.status(201).json({
