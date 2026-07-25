@@ -11,6 +11,9 @@ import BellNotifications from './components/BellNotifications';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import SecurityShifts from './pages/SecurityShifts';
+import VisitorDetails from './pages/VisitorDetails';
+import VisitorHistory from './pages/VisitorHistory';
+import Visitors from './pages/Visitors';
 import UsersAccess from './pages/UsersAccess';
 
 const getInitials = (name?: string): string => {
@@ -33,6 +36,18 @@ const getActiveTitle = (pathname: string): string => {
 
   if (pathname.startsWith('/security-shifts')) {
     return 'Security Shifts';
+  }
+
+  if (pathname.startsWith('/visitors/history')) {
+    return 'Visitor History';
+  }
+
+  if (pathname.startsWith('/visitors/') && pathname !== '/visitors') {
+    return 'Visitor Details';
+  }
+
+  if (pathname.startsWith('/visitors')) {
+    return 'Visitor Management';
   }
 
   if (pathname.startsWith('/settings')) {
@@ -143,6 +158,9 @@ const OrganizationPage: React.FC = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/users" element={<UsersAccess />} />
             <Route path="/security-shifts" element={<SecurityShifts />} />
+            <Route path="/visitors" element={<Visitors />} />
+            <Route path="/visitors/history" element={<VisitorHistory />} />
+            <Route path="/visitors/:id" element={<VisitorDetails />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/access-denied" element={<AccessDenied />} />
           </Routes>

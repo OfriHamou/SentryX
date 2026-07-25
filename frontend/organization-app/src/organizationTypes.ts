@@ -37,3 +37,26 @@ export interface SecurityShift {
   createdAt: string;
   updatedAt: string;
 }
+
+export type VisitorStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'EXPIRED' | 'CANCELLED';
+
+export interface VisitorHost {
+  id: string;
+  fullName: string | null;
+  email: string;
+}
+
+export interface Visitor {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  purpose: string;
+  startAt: string;
+  endAt: string;
+  status: VisitorStatus;
+  host: VisitorHost | null;
+  faceImageUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
