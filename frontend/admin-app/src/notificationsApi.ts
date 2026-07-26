@@ -11,6 +11,14 @@ export interface NotificationEventInfo {
   createdAt: string;
 }
 
+export interface NotificationAlertInfo {
+  id: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+  displayTitle: string;
+  startedAt: string | null;
+  resolvedAt: string | null;
+}
+
 export interface NotificationRobotInfo {
   id: string;
   name: string;
@@ -27,6 +35,8 @@ export interface BellNotification {
   id: string;
   eventId: string | null;
   title: string | null;
+  alertId: string | null;
+  alert: NotificationAlertInfo | null;
   message: string | null;
   severity: string;
   targetApps: NotificationTargetApp[];

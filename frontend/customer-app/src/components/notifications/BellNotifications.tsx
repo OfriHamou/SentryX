@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Badge,
   Box,
@@ -32,7 +33,7 @@ import {
 } from '../../api/notifications';
 
 const TARGET_APP = 'CUSTOMER' as const;
-const POLL_MS = 30_000;
+const POLL_MS = 10_000;
 
 const isHandledStatus = (status?: string | null) => {
   const normalized = (status || '').toLowerCase();
@@ -42,6 +43,13 @@ const isHandledStatus = (status?: string | null) => {
 const formatDate = (value?: string | null) => {
   if (!value) return 'Unknown time';
   return new Date(value).toLocaleString();
+};
+
+const alertStatusLabel = (status?: string | null) => {
+  if (status === 'OPEN') return 'Open';
+  if (status === 'IN_PROGRESS') return 'In progress';
+  if (status === 'RESOLVED') return 'Resolved';
+  return status || 'Unknown';
 };
 
 const dialogPaperSx = {
@@ -129,6 +137,8 @@ function EventDetailDialog({
 
 export default function BellNotifications() {
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const navigate = useNavigate();
+  const refreshInFlight = useRef(false);
   const [notifications, setNotifications] = useState<BellNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -137,6 +147,8 @@ export default function BellNotifications() {
   const open = Boolean(anchorEl);
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setLoading(true);
     try {
       const [items, count] = await Promise.all([
@@ -149,6 +161,7 @@ export default function BellNotifications() {
     } catch {
       setErrorMessage('Could not load notifications');
     } finally {
+      refreshInFlight.current = false;
       setLoading(false);
     }
   }, []);
@@ -180,7 +193,7 @@ export default function BellNotifications() {
   const handleNotificationClick = async (notification: BellNotification) => {
     const now = new Date().toISOString();
     const optimistic = { ...notification, isRead: true, readAt: notification.readAt ?? now };
-    setSelected(optimistic);
+    if (!notification.alertId) setSelected(optimistic);
     if (!notification.isRead) {
       setUnreadCount((count) => Math.max(0, count - 1));
       setNotifications((items) => items.map((item) => (item.id === notification.id ? optimistic : item)));
@@ -188,11 +201,15 @@ export default function BellNotifications() {
 
     try {
       const saved = await markNotificationRead(notification.id);
-      setSelected(saved);
+      if (!notification.alertId) setSelected(saved);
       setNotifications((items) => items.map((item) => (item.id === saved.id ? saved : item)));
     } catch {
       setErrorMessage('Could not update notification status');
     } finally {
+      if (notification.alertId) {
+        setAnchorEl(null);
+        navigate(`/alerts?alertId=${encodeURIComponent(notification.alertId)}`);
+      }
       void refresh();
     }
   };
@@ -252,12 +269,12 @@ export default function BellNotifications() {
                   <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
                       <Typography sx={{ fontWeight: notification.isRead ? 600 : 800, flexGrow: 1 }} noWrap>
-                        {notification.title || 'Notification'}
+                        {notification.alert?.displayTitle || notification.title || 'Notification'}
                       </Typography>
                       <Chip
-                        label={notification.event?.status || 'unknown'}
+                        label={notification.alert ? alertStatusLabel(notification.alert.status) : notification.event?.status || 'Unknown'}
                         size="small"
-                        color={isHandledStatus(notification.event?.status) ? 'success' : 'warning'}
+                        color={isHandledStatus(notification.alert?.status || notification.event?.status) ? 'success' : 'warning'}
                         sx={{ height: 22, textTransform: 'capitalize' }}
                       />
                     </Stack>
