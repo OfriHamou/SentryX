@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   Badge,
   Box,
@@ -30,7 +30,7 @@ import {
 } from '../notificationsApi';
 
 const TARGET_APP = 'ORGANIZATION' as const;
-const POLL_MS = 30_000;
+const POLL_MS = 10_000;
 
 const isHandledStatus = (status?: string | null) => {
   const normalized = (status || '').toLowerCase();
@@ -42,6 +42,13 @@ const formatDate = (value?: string | null) => {
   return new Date(value).toLocaleString();
 };
 
+const alertStatusLabel = (status?: string | null) => {
+  if (status === 'OPEN') return 'Open';
+  if (status === 'IN_PROGRESS') return 'In progress';
+  if (status === 'RESOLVED') return 'Resolved';
+  return status || 'Unknown';
+};
+
 const dialogPaperSx = {
   borderRadius: '28px !important',
   boxShadow: '0 28px 80px rgba(15, 23, 42, 0.24)',
@@ -51,7 +58,7 @@ const dialogPaperSx = {
 };
 
 function EventDetailDialog({ notification, onClose }: { notification: BellNotification | null; onClose: () => void }) {
-  const status = notification?.event?.status ?? 'unknown';
+  const status = notification?.alert?.status ?? notification?.event?.status ?? 'unknown';
   const handled = isHandledStatus(status);
 
   return (
@@ -65,10 +72,10 @@ function EventDetailDialog({ notification, onClose }: { notification: BellNotifi
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pr: 1, px: 3, py: 2.25 }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 800, color: '#1F2937' }}>{notification?.title || 'Notification'}</Typography>
+          <Typography sx={{ fontWeight: 800, color: '#1F2937' }}>{notification?.alert?.displayTitle || notification?.title || 'Notification'}</Typography>
           <Typography variant="body2" color="text.secondary">{formatDate(notification?.createdAt)}</Typography>
         </Box>
-        <Chip label={status} color={handled ? 'success' : 'warning'} size="small" sx={{ fontWeight: 700, textTransform: 'capitalize' }} />
+        <Chip label={notification?.alert ? alertStatusLabel(status) : status} color={handled ? 'success' : 'warning'} size="small" sx={{ fontWeight: 700, textTransform: 'capitalize' }} />
         <IconButton onClick={onClose} aria-label="Close notification details">
           <CloseIcon />
         </IconButton>
@@ -76,6 +83,16 @@ function EventDetailDialog({ notification, onClose }: { notification: BellNotifi
       <DialogContent dividers sx={{ px: 3, py: 2.5 }}>
         <Stack spacing={2}>
           {notification?.message && <Typography color="text.secondary">{notification.message}</Typography>}
+          {notification?.alert && (
+            <Box>
+              <Typography variant="overline" color="text.secondary">Alert</Typography>
+              <Stack spacing={0.5}>
+                <Typography variant="body2">Status: {alertStatusLabel(notification.alert.status)}</Typography>
+                <Typography variant="body2">Started: {formatDate(notification.alert.startedAt)}</Typography>
+                <Typography variant="body2">Resolved: {formatDate(notification.alert.resolvedAt)}</Typography>
+              </Stack>
+            </Box>
+          )}
           <Box>
             <Typography variant="overline" color="text.secondary">Event</Typography>
             <Stack spacing={0.5}>
@@ -109,6 +126,7 @@ function EventDetailDialog({ notification, onClose }: { notification: BellNotifi
 
 export default function BellNotifications() {
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
+  const refreshInFlight = useRef(false);
   const [notifications, setNotifications] = useState<BellNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -117,6 +135,8 @@ export default function BellNotifications() {
   const open = Boolean(anchorEl);
 
   const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setLoading(true);
     try {
       const [items, count] = await Promise.all([
@@ -130,6 +150,7 @@ export default function BellNotifications() {
       setErrorMessage('Could not load notifications');
     } finally {
       setLoading(false);
+      refreshInFlight.current = false;
     }
   }, []);
 
@@ -215,8 +236,8 @@ export default function BellNotifications() {
                   </Box>
                   <Box sx={{ minWidth: 0, flexGrow: 1 }}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
-                      <Typography sx={{ fontWeight: notification.isRead ? 600 : 800, flexGrow: 1 }} noWrap>{notification.title || 'Notification'}</Typography>
-                      <Chip label={notification.event?.status || 'unknown'} size="small" color={isHandledStatus(notification.event?.status) ? 'success' : 'warning'} sx={{ height: 22, textTransform: 'capitalize' }} />
+                      <Typography sx={{ fontWeight: notification.isRead ? 600 : 800, flexGrow: 1 }} noWrap>{notification.alert?.displayTitle || notification.title || 'Notification'}</Typography>
+                      <Chip label={notification.alert ? alertStatusLabel(notification.alert.status) : notification.event?.status || 'Unknown'} size="small" color={isHandledStatus(notification.alert?.status || notification.event?.status) ? 'success' : 'warning'} sx={{ height: 22, textTransform: 'capitalize' }} />
                     </Stack>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }} noWrap>{notification.message || notification.event?.eventType || 'Event notification'}</Typography>
                     <Typography variant="caption" color="text.disabled">{formatDate(notification.createdAt)}</Typography>

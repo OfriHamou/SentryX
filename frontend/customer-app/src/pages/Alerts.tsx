@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Alert as MuiAlert,
     Box,
@@ -73,6 +74,8 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 export default function Alerts() {
     const { user } = useCustomerAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const linkedAlertId = searchParams.get('alertId');
     const [status, setStatus] = useState<AlertStatusFilter>('all');
     const [timeRange, setTimeRange] = useState<TimeRange>('24h');
     const [customFrom, setCustomFrom] = useState('');
@@ -91,6 +94,7 @@ export default function Alerts() {
     const [imageLoadFailed, setImageLoadFailed] = useState(false);
     const detailsRequestId = useRef(0);
     const hasAlertData = useRef(false);
+    const loadedDeepLinkRef = useRef<string | null>(null);
     const canWriteAlerts = hasCustomerPermission(user?.allowedPages, 'alerts', 'write');
 
     const range = useMemo(
@@ -170,6 +174,35 @@ export default function Alerts() {
         };
     }, [customFrom, customTo, offset, range.valid, reloadVersion, status, timeRange]);
 
+    useEffect(() => {
+        if (!linkedAlertId) {
+            loadedDeepLinkRef.current = null;
+            return;
+        }
+        if (loadedDeepLinkRef.current === linkedAlertId) return;
+
+        loadedDeepLinkRef.current = linkedAlertId;
+        const requestId = ++detailsRequestId.current;
+        setDetailsLoading(true);
+        setDetailsError(null);
+        setActionError(null);
+        setImageLoadFailed(false);
+
+        void getAlert(linkedAlertId)
+            .then((alert) => {
+                if (detailsRequestId.current === requestId) setSelectedAlert(alert);
+            })
+            .catch((requestError: unknown) => {
+                if (detailsRequestId.current === requestId) {
+                    const message = requestError instanceof Error ? requestError.message : 'Linked alert could not be loaded';
+                    setActionError(`Linked alert could not be opened: ${message}`);
+                }
+            })
+            .finally(() => {
+                if (detailsRequestId.current === requestId) setDetailsLoading(false);
+            });
+    }, [linkedAlertId]);
+
     const changeStatus = (nextStatus: AlertStatusFilter) => {
         prepareForRequest();
         setOffset(0);
@@ -224,6 +257,12 @@ export default function Alerts() {
         setDetailsError(null);
         setDetailsLoading(false);
         setImageLoadFailed(false);
+        loadedDeepLinkRef.current = null;
+        if (searchParams.has('alertId')) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('alertId');
+            setSearchParams(nextParams, { replace: true });
+        }
     };
 
     const counts = response?.counts ?? { all: 0, active: 0, resolved: 0 };
