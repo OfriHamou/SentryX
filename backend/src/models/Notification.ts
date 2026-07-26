@@ -3,9 +3,12 @@ import { Tenant } from "./Tenant";
 import { Robot } from "./Robot";
 import { Event } from "./Event";
 import { NotificationRecipient } from "./NotificationRecipient";
+import { Alert } from "./Alert";
 
 @Entity("notifications")
 @Index("idx_notifications_unread", ["tenant", "isRead"])
+@Index("idx_notifications_alert", ["alert"])
+@Index("uq_notifications_alert_id", ["alert"], { unique: true, where: "alert_id IS NOT NULL" })
 export class Notification {
     @PrimaryGeneratedColumn("uuid")
     id: string;
@@ -21,6 +24,10 @@ export class Notification {
     @ManyToOne(() => Event, { nullable: true, onDelete: "CASCADE" })
     @JoinColumn({ name: "event_id" })
     event: Event | null;
+
+    @ManyToOne(() => Alert, { nullable: true, onDelete: "CASCADE" })
+    @JoinColumn({ name: "alert_id" })
+    alert: Alert | null;
 
     @Column({ type: "varchar", length: 255, nullable: true })
     title: string | null;

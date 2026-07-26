@@ -10,7 +10,8 @@
     "migrate:registration-approval": "node scripts/run-sql-migration.js migrations/2026-06-18-add-user-status-and-invite-code.sql",
     "migrate:security-shifts": "node scripts/run-sql-migration.js migrations/2026-07-07-add-security-shifts.sql",
     "migrate:visitors": "node scripts/run-sql-migration.js migrations/2026-07-25-add-visitors.sql",
-    "migrate:alerts": "node scripts/run-sql-migration.js migrations/2026-07-25-add-alerts.sql"
+    "migrate:alerts": "node scripts/run-sql-migration.js migrations/2026-07-25-add-alerts.sql",
+    "migrate:notification-alert": "node scripts/run-sql-migration.js migrations/2026-07-26-add-notification-alert.sql"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

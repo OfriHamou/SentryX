@@ -8,6 +8,8 @@ import { Robot } from "../models/Robot";
 import { Tenant } from "../models/Tenant";
 import { User } from "../models/User";
 import type { AuthIdentityPayload } from "../auth/types";
+import { NotificationService } from "../services/NotificationService";
+import { alertDisplayTitle } from "../utils/alertDisplayTitle";
 
 const TARGET_APPS = new Set(["CUSTOMER", "ORGANIZATION", "ADMIN"]);
 const STATUSES = new Set(["all", "read", "unread"]);
@@ -92,12 +94,14 @@ function validateStringArray(value: unknown): string[] | null {
 function toNotificationResponse(recipient: NotificationRecipient) {
     const notification = recipient.notification;
     const event = notification.event;
+    const alert = notification.alert;
     const robot = notification.robot || event?.robot;
     const tenant = notification.tenant;
 
     return {
         id: notification.id,
         eventId: event?.id ?? null,
+        alertId: alert?.id ?? null,
         title: notification.title,
         message: notification.message,
         severity: notification.severity,
@@ -105,6 +109,13 @@ function toNotificationResponse(recipient: NotificationRecipient) {
         isRead: recipient.readAt !== null,
         readAt: recipient.readAt,
         createdAt: notification.createdAt,
+        alert: alert ? {
+            id: alert.id,
+            status: alert.status,
+            displayTitle: alertDisplayTitle(event?.eventType),
+            startedAt: alert.startedAt,
+            resolvedAt: alert.resolvedAt,
+        } : null,
         event: event ? {
             id: event.id,
             eventType: event.eventType,
@@ -150,13 +161,13 @@ export class NotificationController {
                 recipientUserIds: rawRecipientUserIds,
             } = req.body ?? {};
 
-            const targetApps = validateTargetApps(rawTargetApps);
+            const targetApps = NotificationService.normalizeTargetApps(rawTargetApps);
             if (!targetApps) {
                 res.status(400).json({ ok: false, error: "Invalid targetApps" });
                 return;
             }
 
-            const recipientUserIds = validateStringArray(rawRecipientUserIds);
+            const recipientUserIds = NotificationService.normalizeRecipientIds(rawRecipientUserIds);
             if (!recipientUserIds) {
                 res.status(400).json({ ok: false, error: "Invalid recipientUserIds" });
                 return;
@@ -223,25 +234,16 @@ export class NotificationController {
                 return;
             }
 
-            const created = await AppDataSource.transaction(async (manager) => {
-                const notification = new Notification();
-                notification.tenant = tenant;
-                notification.robot = robot;
-                notification.event = event;
-                notification.title = typeof title === "string" ? title : null;
-                notification.message = typeof message === "string" ? message : null;
-                notification.severity = typeof severity === "string" && severity.trim().length > 0 ? severity.trim() : "info";
-                notification.targetApps = targetApps;
-                notification.metadata = metadata ?? null;
-                const savedNotification = await manager.save(Notification, notification);
-                const recipients = users.map((user) => manager.create(NotificationRecipient, {
-                    notification: savedNotification,
-                    user,
-                    readAt: null,
-                }));
-
-                await manager.save(NotificationRecipient, recipients);
-                return savedNotification;
+            const created = await NotificationService.create({
+                tenant,
+                robot,
+                event,
+                title: typeof title === "string" ? title : null,
+                message: typeof message === "string" ? message : null,
+                severity: typeof severity === "string" ? severity : undefined,
+                targetApps,
+                metadata: metadata ?? null,
+                recipients: users,
             });
 
             const recipient = await AppDataSource.getRepository(NotificationRecipient)
@@ -250,6 +252,7 @@ export class NotificationController {
                 .leftJoinAndSelect("notification.tenant", "tenant")
                 .leftJoinAndSelect("notification.event", "event")
                 .leftJoinAndSelect("notification.robot", "robot")
+                .leftJoinAndSelect("notification.alert", "alert")
                 .leftJoinAndSelect("event.robot", "eventRobot")
                 .where("recipient.user_id = :userId", { userId: finalRecipientUserIds[0] })
                 .andWhere("notification.id = :notificationId", { notificationId: created.id })
@@ -295,6 +298,7 @@ export class NotificationController {
                 .leftJoinAndSelect("notification.tenant", "tenant")
                 .leftJoinAndSelect("notification.event", "event")
                 .leftJoinAndSelect("notification.robot", "robot")
+                .leftJoinAndSelect("notification.alert", "alert")
                 .leftJoinAndSelect("event.robot", "eventRobot")
                 .where("recipient.user_id = :userId", { userId: auth.userId })
                 .orderBy("notification.createdAt", "DESC")
@@ -422,6 +426,7 @@ export class NotificationController {
                 .leftJoinAndSelect("notification.tenant", "tenant")
                 .leftJoinAndSelect("notification.event", "event")
                 .leftJoinAndSelect("notification.robot", "robot")
+                .leftJoinAndSelect("notification.alert", "alert")
                 .leftJoinAndSelect("event.robot", "eventRobot")
                 .where("recipient.user_id = :userId", { userId: auth.userId })
                 .andWhere("notification.id = :notificationId", { notificationId })
