@@ -2,13 +2,14 @@ import { AppBar, Toolbar, Box, Button, Container, Typography } from '@mui/materi
 import { NavLink, Outlet } from 'react-router-dom';
 import logoImg from '../assets/LOGO.png';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
-import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon, Settings as SettingsIcon, PhotoLibrary as MediaIcon } from '@mui/icons-material';
+import { Dashboard as DashboardIcon, Videocam as LiveIcon, NotificationsActive as AlertsIcon, SportsEsports as ControlIcon, History as HistoryIcon, Settings as SettingsIcon, PhotoLibrary as MediaIcon, EventAvailable as DutyIcon } from '@mui/icons-material';
 import BellNotifications from '../components/notifications/BellNotifications';
 
 const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon />, permissions: [{ resource: 'dashboard', action: 'read' }] },
     { label: 'Live', path: '/live', icon: <LiveIcon />, permissions: [{ resource: 'live', action: 'read' }] },
     { label: 'Alerts', path: '/alerts', icon: <AlertsIcon />, permissions: [{ resource: 'alerts', action: 'read' }] },
+    { label: 'Shift Duty', path: '/shift-duty', icon: <DutyIcon />, permissions: [{ resource: 'on_call', action: 'read' }] },
     { label: 'Control', path: '/control', icon: <ControlIcon />, permissions: [{ resource: 'control', action: 'read' }] },
     { label: 'History', path: '/history', icon: <HistoryIcon />, permissions: [{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }] },
     { label: 'Media', path: '/media', icon: <MediaIcon />, permissions: [{ resource: 'history', action: 'read' }, { resource: 'events', action: 'read' }] },

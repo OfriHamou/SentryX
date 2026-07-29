@@ -4,6 +4,7 @@ import {
     AccessTime as TimeIcon,
     CheckCircle as CheckIcon,
     PersonOutlined as PersonIcon,
+    EventAvailable as ShiftIcon,
 } from '@mui/icons-material';
 import type { Alert } from '../../types/alert';
 import { getEventDisplayByType } from '../live/activity/eventRegistry';
@@ -67,6 +68,12 @@ export default function AlertCard({
                                 <Typography variant="caption">
                                     {alert.assignedUser.fullName || alert.assignedUser.email}
                                 </Typography>
+                            </Stack>
+                        )}
+                        {alert.assignedShift && (
+                            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                                <ShiftIcon sx={{ fontSize: 14 }} />
+                                <Typography variant="caption">{alert.assignedShift.name}</Typography>
                             </Stack>
                         )}
                     </Stack>
