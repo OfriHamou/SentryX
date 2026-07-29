@@ -1,20 +1,18 @@
 import { Request, Response } from "express";
-import { SelectQueryBuilder } from "typeorm";
 import type { AuthIdentityPayload } from "../auth/types";
 import { AppDataSource } from "../db";
 import { Alert, AlertStatus } from "../models/Alert";
 import { User } from "../models/User";
+import {
+    alertCountsQuery,
+    applyAlertFilters,
+    applyAlertTab,
+    hydratedAlertQuery,
+    serializeAlert,
+    type AlertFilters,
+    type AlertTab,
+} from "../services/AlertReadService";
 import { logger } from "../utils/logger";
-
-type AlertTab = "all" | "active" | "resolved";
-
-interface AlertFilters {
-    from?: Date;
-    to?: Date;
-    eventType?: string;
-    robotId?: string;
-    assignedUserId?: string;
-}
 
 function queryString(value: unknown): string | undefined {
     return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
@@ -34,108 +32,6 @@ function parseNonNegativeInteger(value: unknown, fallback: number, maximum?: num
     const parsed = Number(text);
     if (!Number.isSafeInteger(parsed)) return null;
     return maximum === undefined ? parsed : Math.min(parsed, maximum);
-}
-
-export function alertDisplayTitle(eventType: string | null | undefined): string {
-    const knownTitles: Record<string, string> = {
-        face_detected_unknown: "Unknown person detected",
-        motion_detected: "Motion detected",
-        motion: "Motion detected",
-        smoke: "Smoke detected",
-        fire: "Fire detected",
-        wet_floor_check: "Wet floor detected",
-        zone_compliance: "Restricted area violation",
-    };
-
-    if (!eventType) return "Alert";
-    if (knownTitles[eventType]) return knownTitles[eventType];
-
-    const readable = eventType.replace(/_/g, " ").replace(/\s+/g, " ").trim();
-    return readable.length > 0 ? readable.charAt(0).toUpperCase() + readable.slice(1) : "Alert";
-}
-
-export function serializeAlert(alert: Alert) {
-    const event = alert.event;
-    const robot = event?.robot;
-    return {
-        id: alert.id,
-        status: alert.status,
-        displayTitle: alertDisplayTitle(event?.eventType),
-        startedAt: alert.startedAt,
-        resolvedAt: alert.resolvedAt,
-        resolutionNotes: alert.resolutionNotes,
-        createdAt: alert.createdAt,
-        updatedAt: alert.updatedAt,
-        assignedUser: alert.assignedUser ? {
-            id: alert.assignedUser.id,
-            fullName: alert.assignedUser.fullName,
-            email: alert.assignedUser.email,
-            jobTitle: alert.assignedUser.jobTitle,
-        } : null,
-        assignedShift: alert.assignedShift ? {
-            id: alert.assignedShift.id,
-            name: alert.assignedShift.name,
-            startAt: alert.assignedShift.startAt,
-            endAt: alert.assignedShift.endAt,
-            status: alert.assignedShift.status,
-        } : null,
-        resolvedBy: alert.resolvedBy ? {
-            id: alert.resolvedBy.id,
-            fullName: alert.resolvedBy.fullName,
-            email: alert.resolvedBy.email,
-        } : null,
-        event: event ? {
-            id: event.id,
-            eventType: event.eventType,
-            imagePath: event.imagePath,
-            aiMetadata: event.aiMetadata,
-            status: event.status,
-            createdAt: event.createdAt,
-            robot: robot ? {
-                id: robot.id,
-                name: robot.name,
-                location: robot.location,
-                status: robot.status,
-            } : null,
-        } : null,
-    };
-}
-
-function addTenantSafeRelations(query: SelectQueryBuilder<Alert>, tenantId: string): SelectQueryBuilder<Alert> {
-    return query
-        .innerJoinAndSelect("alert.event", "event", "event.tenant_id = :tenantId", { tenantId })
-        .innerJoinAndSelect("event.robot", "robot", "robot.tenant_id = :tenantId", { tenantId })
-        .leftJoinAndSelect("alert.assignedUser", "assignedUser", "assignedUser.tenant_id = :tenantId", { tenantId })
-        .leftJoinAndSelect("alert.assignedShift", "assignedShift", "assignedShift.tenant_id = :tenantId", { tenantId })
-        .leftJoinAndSelect("alert.resolvedBy", "resolvedBy", "resolvedBy.tenant_id = :tenantId", { tenantId });
-}
-
-function applyFilters(query: SelectQueryBuilder<Alert>, tenantId: string, filters: AlertFilters): SelectQueryBuilder<Alert> {
-    query.where("alert.tenant_id = :tenantId", { tenantId });
-    if (filters.from) query.andWhere("alert.created_at >= :from", { from: filters.from });
-    if (filters.to) query.andWhere("alert.created_at <= :to", { to: filters.to });
-    if (filters.eventType) query.andWhere("event.event_type = :eventType", { eventType: filters.eventType });
-    if (filters.robotId) query.andWhere("event.robot_id = :robotId", { robotId: filters.robotId });
-    if (filters.assignedUserId) query.andWhere("alert.assigned_user_id = :assignedUserId", { assignedUserId: filters.assignedUserId });
-    return query;
-}
-
-function applyTab(query: SelectQueryBuilder<Alert>, tab: AlertTab): SelectQueryBuilder<Alert> {
-    if (tab === "active") {
-        query.andWhere("alert.status IN (:...activeStatuses)", {
-            activeStatuses: [AlertStatus.OPEN, AlertStatus.IN_PROGRESS],
-        });
-    } else if (tab === "resolved") {
-        query.andWhere("alert.status = :resolvedStatus", { resolvedStatus: AlertStatus.RESOLVED });
-    }
-    return query;
-}
-
-function hydratedAlertQuery(tenantId: string): SelectQueryBuilder<Alert> {
-    return addTenantSafeRelations(
-        AppDataSource.getRepository(Alert).createQueryBuilder("alert"),
-        tenantId,
-    );
 }
 
 export class AlertController {
@@ -169,22 +65,15 @@ export class AlertController {
                 assignedUserId: queryString(req.query.assignedUserId),
             };
 
-            const listQuery = applyTab(
-                applyFilters(hydratedAlertQuery(auth.tenantId), auth.tenantId, filters),
+            const listQuery = applyAlertTab(
+                applyAlertFilters(hydratedAlertQuery(auth.tenantId), auth.tenantId, filters),
                 statusText as AlertTab,
             )
                 .orderBy("alert.createdAt", "DESC")
                 .take(limit)
                 .skip(offset);
 
-            const countQuery = applyFilters(hydratedAlertQuery(auth.tenantId), auth.tenantId, filters)
-                .select("COUNT(alert.id)", "all")
-                .addSelect("COUNT(alert.id) FILTER (WHERE alert.status IN (:...activeStatuses))", "active")
-                .addSelect("COUNT(alert.id) FILTER (WHERE alert.status = :resolvedStatus)", "resolved")
-                .setParameters({
-                    activeStatuses: [AlertStatus.OPEN, AlertStatus.IN_PROGRESS],
-                    resolvedStatus: AlertStatus.RESOLVED,
-                });
+            const countQuery = alertCountsQuery(auth.tenantId, filters);
 
             const [[alerts, total], rawCounts] = await Promise.all([
                 listQuery.getManyAndCount(),

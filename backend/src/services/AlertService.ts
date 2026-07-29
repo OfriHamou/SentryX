@@ -4,6 +4,7 @@ import { Event } from "../models/Event";
 import { Tenant } from "../models/Tenant";
 import { logger } from "../utils/logger";
 import { NotificationService } from "./NotificationService";
+import { OnCallService } from "./OnCallService";
 
 export class AlertService {
     static shouldCreateForEventType(eventType: string | null | undefined): boolean {
@@ -24,7 +25,7 @@ export class AlertService {
             .orIgnore()
             .execute();
 
-        const alert = await repository.findOne({
+        let alert = await repository.findOne({
             where: {
                 tenant: { id: tenantId },
                 event: { id: eventId },
@@ -35,6 +36,19 @@ export class AlertService {
         if (!alert) {
             throw new Error(`Alert could not be created or found for event ${eventId}`);
         }
+
+        try {
+            alert = await OnCallService.assignAlert(alert.id, tenantId);
+        } catch (assignmentError) {
+            logger.error("Failed to assign persisted Alert to OnCall shift", assignmentError, {
+                category: "ON_CALL",
+                action: "ASSIGN_ALERT_FAILED",
+                status: "FAILED",
+                context: "AlertService.createForEvent",
+                metadata: { alertId: alert.id, eventId, tenantId },
+            });
+        }
+
         try {
             await NotificationService.ensureForAlert(alert.id, tenantId);
         } catch (notificationError) {

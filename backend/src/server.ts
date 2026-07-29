@@ -27,6 +27,7 @@ import eventRoutes from "./routes/eventRoutes";
 import faceRoutes from "./routes/faceRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import alertRoutes from "./routes/alertRoutes";
+import onCallRoutes from "./routes/onCallRoutes";
 import { logger } from "./utils/logger";
 
 export const app = express();
@@ -86,6 +87,9 @@ function initializeRoutes(app: express.Application) {
 
     // Mount operational Alert routes under /api/alerts
     app.use("/api/alerts", alertRoutes);
+
+    // Mount Customer operational OnCall routes under /api/on-call
+    app.use("/api/on-call", onCallRoutes);
 
     // Mount notification routes under /api/notifications
     app.use("/api/notifications", notificationRoutes);
