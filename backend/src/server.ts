@@ -29,6 +29,8 @@ import notificationRoutes from "./routes/notificationRoutes";
 import alertRoutes from "./routes/alertRoutes";
 import onCallRoutes from "./routes/onCallRoutes";
 import { logger } from "./utils/logger";
+import { mountDocumentationRoutes } from "./docs/routes";
+import { validateOpenApiSpecification } from "./docs/swagger";
 
 export const app = express();
 
@@ -70,6 +72,9 @@ function initializeRoutes(app: express.Application) {
     app.get("/api/health", (req, res) => {
         res.status(200).json({ status: "OK" });
     });
+
+    // Documentation routes must be mounted before the frontend fallback.
+    mountDocumentationRoutes(app);
 
     // Mount our Tenant routes under /api/tenants
     app.use("/api/tenants", tenantRoutes);
@@ -115,6 +120,9 @@ async function runServer() {
     prerequisites();
     const server = http.createServer(app);
     app.use(express.json());
+
+    // Fail startup loudly if the generated OpenAPI document is structurally invalid.
+    await validateOpenApiSpecification();
 
     // Make sure this is the last function we are calling
     initializeRoutes(app);
