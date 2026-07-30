@@ -15,6 +15,7 @@ import VisitorDetails from './pages/VisitorDetails';
 import VisitorHistory from './pages/VisitorHistory';
 import Visitors from './pages/Visitors';
 import UsersAccess from './pages/UsersAccess';
+import Robots from './pages/Robots';
 
 const getInitials = (name?: string): string => {
   if (!name) {
@@ -36,6 +37,10 @@ const getActiveTitle = (pathname: string): string => {
 
   if (pathname.startsWith('/security-shifts')) {
     return 'Security Shifts';
+  }
+
+  if (pathname.startsWith('/robots')) {
+    return 'Robot Management';
   }
 
   if (pathname.startsWith('/visitors/history')) {
@@ -158,6 +163,7 @@ const OrganizationPage: React.FC = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/users" element={<UsersAccess />} />
             <Route path="/security-shifts" element={<SecurityShifts />} />
+            <Route path="/robots" element={<Robots />} />
             <Route path="/visitors" element={<Visitors />} />
             <Route path="/visitors/history" element={<VisitorHistory />} />
             <Route path="/visitors/:id" element={<VisitorDetails />} />

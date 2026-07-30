@@ -6,6 +6,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import PeopleIcon from '@mui/icons-material/People';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WorkspacesIcon from '@mui/icons-material/Workspaces';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
 import { Box, Divider, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { useOrganizationAuth } from '../auth/OrganizationAuthProvider';
@@ -32,6 +33,7 @@ const Sidebar: React.FC = () => {
   const { user } = useOrganizationAuth();
   const canReadSecurityShifts = hasOrganizationPermission(user?.allowedPages, 'organization_security_shifts', 'read');
   const canReadVisitors = hasOrganizationPermission(user?.allowedPages, 'organization_visitors', 'read');
+  const canReadRobots = hasOrganizationPermission(user?.allowedPages, 'organization_robots', 'read');
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
@@ -124,6 +126,19 @@ const Sidebar: React.FC = () => {
                 <ListItemText
                   disableTypography
                   primary={<Typography sx={{ fontWeight: isActive('/security-shifts') ? 700 : 500, fontSize: '0.95rem' }}>Security Shifts</Typography>}
+                />
+              </ListItemButton>
+            </ListItem>
+          )}
+          {canReadRobots && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton component={RouterLink} to="/robots" sx={navItemSx(isActive('/robots'))}>
+                <ListItemIcon sx={{ color: 'inherit', minWidth: 40 }}>
+                  <SmartToyIcon />
+                </ListItemIcon>
+                <ListItemText
+                  disableTypography
+                  primary={<Typography sx={{ fontWeight: isActive('/robots') ? 700 : 500, fontSize: '0.95rem' }}>Robots</Typography>}
                 />
               </ListItemButton>
             </ListItem>

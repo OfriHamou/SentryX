@@ -17,6 +17,21 @@ export interface OrganizationTenantUser {
   allowedPages: AllowedPages;
 }
 
+export interface OrganizationRobot {
+  id: string;
+  name: string;
+  location: string | null;
+  status: string;
+  lastConnection: string | null;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface OrganizationRobotFormState {
+  name: string;
+  location: string;
+}
+
 export type SecurityShiftStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
 export interface SecurityShiftAssignedUser {
