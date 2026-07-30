@@ -1,0 +1,252 @@
+import type { OpenApiObject } from "../types";
+
+const uuid = { type: "string", format: "uuid" };
+const dateTime = { type: "string", format: "date-time" };
+const nullableDateTime = { ...dateTime, nullable: true };
+
+export const operationSchemas: Record<string, OpenApiObject> = {
+    AlertAssignedUser: {
+        type: "object",
+        required: ["id", "email"],
+        properties: {
+            id: uuid,
+            fullName: { type: "string", nullable: true },
+            email: { type: "string", format: "email" },
+            jobTitle: { type: "string", nullable: true },
+        },
+    },
+    AlertAssignedShift: {
+        type: "object",
+        required: ["id", "name", "startAt", "endAt", "status"],
+        properties: {
+            id: uuid,
+            name: { type: "string" },
+            startAt: dateTime,
+            endAt: dateTime,
+            status: { type: "string", enum: ["SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"] },
+        },
+    },
+    Alert: {
+        type: "object",
+        required: ["id", "status", "displayTitle", "createdAt", "updatedAt"],
+        description: "A persistent operational incident created from a qualifying robot Event.",
+        properties: {
+            id: uuid,
+            status: { type: "string", enum: ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+            displayTitle: { type: "string", example: "Unknown person detected" },
+            startedAt: nullableDateTime,
+            resolvedAt: nullableDateTime,
+            resolutionNotes: { type: "string", nullable: true },
+            createdAt: dateTime,
+            updatedAt: dateTime,
+            assignedUser: { allOf: [{ $ref: "#/components/schemas/AlertAssignedUser" }], nullable: true },
+            assignedShift: { allOf: [{ $ref: "#/components/schemas/AlertAssignedShift" }], nullable: true },
+            resolvedBy: { allOf: [{ $ref: "#/components/schemas/AlertAssignedUser" }], nullable: true },
+            event: { allOf: [{ $ref: "#/components/schemas/Event" }], nullable: true },
+        },
+    },
+    AlertListResponse: {
+        type: "object",
+        required: ["ok", "alerts", "counts", "pagination"],
+        properties: {
+            ok: { type: "boolean", example: true },
+            alerts: { type: "array", items: { $ref: "#/components/schemas/Alert" } },
+            counts: {
+                type: "object",
+                required: ["all", "active", "resolved"],
+                properties: {
+                    all: { type: "integer", example: 1 },
+                    active: { type: "integer", example: 1 },
+                    resolved: { type: "integer", example: 0 },
+                },
+            },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+        },
+    },
+    NotificationRecipientState: {
+        type: "object",
+        description: "Authenticated user's per-notification read state.",
+        required: ["isRead", "readAt"],
+        properties: {
+            isRead: { type: "boolean" },
+            readAt: nullableDateTime,
+        },
+    },
+    NotificationAlertLink: {
+        type: "object",
+        required: ["id", "status", "displayTitle"],
+        properties: {
+            id: uuid,
+            status: { type: "string", enum: ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+            displayTitle: { type: "string" },
+            startedAt: nullableDateTime,
+            resolvedAt: nullableDateTime,
+        },
+    },
+    NotificationTenantLink: {
+        type: "object",
+        required: ["id", "name"],
+        properties: {
+            id: uuid,
+            name: { type: "string" },
+        },
+    },
+    SecurityShiftAssignedUser: {
+        type: "object",
+        required: ["id", "email", "roleName"],
+        properties: {
+            id: uuid,
+            fullName: { type: "string", nullable: true },
+            email: { type: "string", format: "email" },
+            roleName: { type: "string", example: "SECURITY_OPERATOR" },
+        },
+    },
+    Notification: {
+        type: "object",
+        required: ["id", "severity", "targetApps", "isRead", "createdAt"],
+        description: "A user-facing message. Reading it does not change the linked Alert status.",
+        properties: {
+            id: uuid,
+            eventId: { ...uuid, nullable: true },
+            alertId: { ...uuid, nullable: true, description: "Nullable for manual and legacy notifications." },
+            title: { type: "string", nullable: true },
+            message: { type: "string", nullable: true },
+            severity: { type: "string", example: "warning" },
+            targetApps: {
+                type: "array",
+                items: { type: "string", enum: ["CUSTOMER", "ORGANIZATION", "ADMIN"] },
+            },
+            metadata: { type: "object", nullable: true, additionalProperties: true },
+            isRead: { type: "boolean" },
+            readAt: nullableDateTime,
+            createdAt: dateTime,
+            event: { allOf: [{ $ref: "#/components/schemas/Event" }], nullable: true },
+            alert: { allOf: [{ $ref: "#/components/schemas/NotificationAlertLink" }], nullable: true },
+            robot: { allOf: [{ $ref: "#/components/schemas/Robot" }], nullable: true },
+            tenant: { allOf: [{ $ref: "#/components/schemas/NotificationTenantLink" }], nullable: true },
+        },
+    },
+    NotificationListResponse: {
+        type: "object",
+        required: ["ok", "notifications", "pagination"],
+        properties: {
+            ok: { type: "boolean", example: true },
+            notifications: { type: "array", items: { $ref: "#/components/schemas/Notification" } },
+            pagination: { $ref: "#/components/schemas/Pagination" },
+        },
+    },
+    SecurityShift: {
+        type: "object",
+        required: ["id", "name", "startAt", "endAt", "status", "createdAt", "updatedAt"],
+        properties: {
+            id: uuid,
+            name: { type: "string", example: "Night shift" },
+            startAt: dateTime,
+            endAt: dateTime,
+            status: { type: "string", enum: ["SCHEDULED", "ACTIVE", "COMPLETED", "CANCELLED"] },
+            notes: { type: "string", nullable: true },
+            assignedUser: { allOf: [{ $ref: "#/components/schemas/SecurityShiftAssignedUser" }], nullable: true },
+            createdAt: dateTime,
+            updatedAt: dateTime,
+        },
+    },
+    Visitor: {
+        type: "object",
+        required: ["id", "name", "phone", "purpose", "startAt", "endAt", "status", "faceImageUrl"],
+        properties: {
+            id: uuid,
+            name: { type: "string" },
+            phone: { type: "string" },
+            email: { type: "string", format: "email", nullable: true },
+            purpose: { type: "string" },
+            startAt: dateTime,
+            endAt: dateTime,
+            status: { type: "string", enum: ["SCHEDULED", "ACTIVE", "COMPLETED", "EXPIRED", "CANCELLED"] },
+            host: { allOf: [{ $ref: "#/components/schemas/AlertAssignedUser" }], nullable: true },
+            faceImageUrl: { type: "string", example: "/api/organization/visitors/00000000-0000-4000-8000-000000000005/image" },
+            createdAt: dateTime,
+            updatedAt: dateTime,
+        },
+    },
+    OnCallCurrentShift: {
+        type: "object",
+        required: ["id", "name", "startAt", "endAt", "status", "notes"],
+        description: "Compact current-duty shift serialized by OnCallController.me.",
+        properties: {
+            id: uuid,
+            name: { type: "string" },
+            startAt: dateTime,
+            endAt: dateTime,
+            status: { type: "string", enum: ["ACTIVE"] },
+            notes: { type: "string", nullable: true },
+        },
+    },
+    CurrentDutyResponse: {
+        type: "object",
+        required: ["ok", "isOnCall", "currentShift"],
+        properties: {
+            ok: { type: "boolean", example: true },
+            isOnCall: { type: "boolean", example: true },
+            currentShift: { allOf: [{ $ref: "#/components/schemas/OnCallCurrentShift" }], nullable: true },
+        },
+        example: {
+            ok: true,
+            isOnCall: true,
+            currentShift: {
+                id: "00000000-0000-4000-8000-000000000051",
+                name: "Night shift",
+                startAt: "2026-07-29T18:00:00.000Z",
+                endAt: "2026-07-30T06:00:00.000Z",
+                status: "ACTIVE",
+                notes: "Monitor lobby and loading dock",
+            },
+        },
+    },
+    OnCallTasksResponse: {
+        allOf: [
+            { $ref: "#/components/schemas/AlertListResponse" },
+        ],
+        description: "Alerts assigned to the authenticated Security Operator; OnCall tasks are not separate entities.",
+        example: {
+            ok: true,
+            alerts: [{
+                id: "00000000-0000-4000-8000-000000000021",
+                status: "IN_PROGRESS",
+                displayTitle: "Unknown person detected",
+                startedAt: "2026-07-29T18:05:00.000Z",
+                resolvedAt: null,
+                resolutionNotes: null,
+                createdAt: "2026-07-29T18:04:00.000Z",
+                updatedAt: "2026-07-29T18:05:00.000Z",
+                assignedUser: {
+                    id: "00000000-0000-4000-8000-000000000001",
+                    fullName: "Alex Operator",
+                    email: "operator@example.test",
+                    jobTitle: "Security Operator",
+                },
+                assignedShift: {
+                    id: "00000000-0000-4000-8000-000000000051",
+                    name: "Night shift",
+                    startAt: "2026-07-29T18:00:00.000Z",
+                    endAt: "2026-07-30T06:00:00.000Z",
+                    status: "ACTIVE",
+                },
+                resolvedBy: null,
+                event: null,
+            }],
+            counts: { all: 1, active: 1, resolved: 0 },
+            pagination: { limit: 50, offset: 0, total: 1 },
+        },
+    },
+    AuthorizedFace: {
+        type: "object",
+        required: ["id", "name", "images"],
+        properties: {
+            id: uuid,
+            name: { type: "string" },
+            role: { type: "string", nullable: true },
+            images: { type: "array", items: { type: "string" } },
+            addedAt: dateTime,
+        },
+    },
+};
