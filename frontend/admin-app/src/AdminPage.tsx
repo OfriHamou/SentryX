@@ -28,7 +28,10 @@ import { hasPermission, useAuth } from './auth/AuthContext';
 import { PermissionGate } from './components/PermissionGate';
 import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
 import { LicensesTab } from './components/LicensesTab';
+import { AdminAlertsTab } from './components/AdminAlertsTab';
 import BellNotifications from './components/BellNotifications';
+import { getAdminAlerts } from './api/adminAlerts';
+import type { AdminAlert, AdminAlertCounts } from './types/adminAlert';
 // @ts-ignore
 import logoImg from './assets/LOGO.PNG';
 
@@ -73,6 +76,9 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const [tenants, setTenants] = useState<any[]>([]);
     const [availableLicenses, setAvailableLicenses] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dashboardAlerts, setDashboardAlerts] = useState<AdminAlert[]>([]);
+    const [dashboardAlertCounts, setDashboardAlertCounts] = useState<AdminAlertCounts | null>(null);
+    const [dashboardAlertsError, setDashboardAlertsError] = useState(false);
     // Modals state
     const [openAddModal, setOpenAddModal] = useState(false);
     const [openEditModal, setOpenEditModal] = useState<{ open: boolean, tenant: any }>({ open: false, tenant: null });
@@ -85,17 +91,36 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const canRead = (resource: string) => hasPermission(user?.allowedPages, resource, 'read');
     const canReadTenants = canRead('tenants');
     const canReadLicenses = canRead('licenses');
-    const canReadAlerts = canRead('alerts');
-    const canAccessDashboard = canRead('dashboard') || canReadTenants || canReadLicenses || canReadAlerts;
+    const canReadTenantAlerts = canRead('alerts');
+    const canReadAdminAlerts = canRead('admin_alerts');
+    const canWriteAdminAlerts = hasPermission(user?.allowedPages, 'admin_alerts', 'write');
+    const canAccessDashboard = canRead('dashboard') || canReadTenants || canReadLicenses || canReadAdminAlerts;
     const canAccessTenants = canReadTenants;
     const canAccessAnalytics = canRead('analytics') || canRead('reports');
-    const canAccessAlerts = canReadAlerts;
+    const canAccessAlerts = canReadAdminAlerts;
     const canAccessSettings = canRead('settings') || canRead('roles');
     const canAccessRegistrationRequests = canRead('registration_requests');
 
     useEffect(() => {
         loadData();
     }, [canReadTenants, canReadLicenses]);
+
+    useEffect(() => {
+        if (!canReadAdminAlerts) {
+            return;
+        }
+        const controller = new AbortController();
+        getAdminAlerts({ status: 'active', limit: 5, offset: 0 }, controller.signal)
+            .then((result) => {
+                setDashboardAlerts(result.alerts);
+                setDashboardAlertCounts(result.counts);
+                setDashboardAlertsError(false);
+            })
+            .catch(() => {
+                if (!controller.signal.aborted) setDashboardAlertsError(true);
+            });
+        return () => controller.abort();
+    }, [canReadAdminAlerts]);
 
     const loadData = async () => {
         setLoading(true);
@@ -248,7 +273,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                           { text: 'Licenses', icon: <VpnKeyIcon /> },
                           { text: 'Alerts', icon: <NotificationsIcon /> },
                           { text: 'Settings', icon: <SettingsIcon /> }
-                        ].map((item) => (
+                        ].filter((item) => item.text !== 'Alerts' || canReadAdminAlerts).map((item) => (
                             <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
                                 <ListItemButton
                                     onClick={() => setActiveTab(item.text)}
@@ -271,17 +296,19 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
             {/* Main Content Workspace */}
             <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 4 }, width: `calc(100% - ${drawerWidth}px)`, backgroundColor: '#F4F7FE' }}>
                 {/* Header Profile Row */}
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 5 }}>
-                    <Box>
-                        <Typography variant="h4" sx={{ fontWeight: 800, color: '#2B3674' }}>
-                            {activeTab}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#A3AED0', fontWeight: 500, mt: 0.5 }}>
-                            Welcome back, here is your {activeTab.toLowerCase()} overview.
-                        </Typography>
-                    </Box>
+                <Box sx={{ display: 'flex', justifyContent: activeTab === 'Alerts' ? 'flex-end' : 'space-between', alignItems: 'center', mb: activeTab === 'Alerts' ? 3 : 5 }}>
+                    {activeTab !== 'Alerts' && (
+                        <Box>
+                            <Typography variant="h4" sx={{ fontWeight: 800, color: '#2B3674' }}>
+                                {activeTab}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#A3AED0', fontWeight: 500, mt: 0.5 }}>
+                                Welcome back, here is your {activeTab.toLowerCase()} overview.
+                            </Typography>
+                        </Box>
+                    )}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, backgroundColor: '#fff', p: 1, borderRadius: '30px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)' }}>
-                        {canReadAlerts && <BellNotifications />}
+                        {canReadTenantAlerts && <BellNotifications />}
                         <Avatar sx={{ bgcolor: '#11047A', width: 40, height: 40, fontWeight: 'bold' }}>AD</Avatar>
                         {onLogout && (
                             <Button
@@ -309,7 +336,17 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                                 { title: 'Total Tenants', val: tenants.length.toString(), subtitle: tenantGrowthText, subtitleColor: tenantGrowthColor, trendIcon: tenantGrowthIcon, icon: <BusinessIcon sx={{ fontSize: 26, color: '#4318FF' }}/>, bg: '#F4F7FE' },
                                 { title: 'Active Robots', val: allRobots.length.toString(), subtitle: robotSubtitle, subtitleColor: robotSubtitleColor, trendIcon: null, icon: <MemoryIcon sx={{ fontSize: 26, color: '#05CD99' }}/>, bg: '#E6F9F5' },
                                 { title: 'Expiring Licenses', val: licensesExpiringSoon.toString(), subtitle: licenseSubtitle, subtitleColor: licenseSubtitleColor, trendIcon: null, icon: <VerifiedUserIcon sx={{ fontSize: 26, color: '#FFCE20' }}/>, bg: '#FFF9E6' },
-                                { title: 'Critical Alerts', val: '—', subtitle: 'Temporarily disabled', subtitleColor: '#A3AED0', trendIcon: null, icon: <NotificationsIcon sx={{ fontSize: 26, color: '#A3AED0' }}/>, bg: '#F4F7FE' }
+                                {
+                                    title: 'Active Alerts',
+                                    val: canReadAdminAlerts ? (dashboardAlertCounts?.active ?? 0).toString() : '—',
+                                    subtitle: canReadAdminAlerts
+                                        ? `${dashboardAlertCounts?.tenantsWithActive ?? 0} tenants affected`
+                                        : 'Permission required',
+                                    subtitleColor: dashboardAlertsError ? '#D97706' : '#EE5D50',
+                                    trendIcon: null,
+                                    icon: <NotificationsIcon sx={{ fontSize: 26, color: '#EE5D50' }}/>,
+                                    bg: '#FDECEB'
+                                }
                             ].map((stat, i) => (
                                 <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={i}>
                                     <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', border: 'none', height: '100%', backgroundColor: '#fff' }}>
@@ -333,49 +370,68 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
 
                         <Grid container spacing={3} sx={{ mb: 5 }}>
                             <Grid size={{ xs: 12 }}>
-                                <Card
-                                    aria-disabled="true"
-                                    sx={{
-                                        borderRadius: '20px',
-                                        boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)',
-                                        backgroundColor: '#fff',
-                                        border: 'none',
-                                        opacity: 0.7,
-                                        pointerEvents: 'none'
-                                    }}
-                                >
+                                <Card sx={{ borderRadius: '20px', boxShadow: '14px 17px 40px 4px rgba(112, 144, 176, 0.08)', backgroundColor: '#fff', border: 'none' }}>
                                     <Box sx={{ p: 3, pt: 4, px: 4 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
                                             <Typography variant="h5" sx={{ fontWeight: 700, color: '#2B3674' }}>
                                                 Recent System Alerts
                                             </Typography>
-                                            <Chip label="Disabled" size="small" sx={{ fontWeight: 700 }} />
+                                            {canReadAdminAlerts && (
+                                                <Button onClick={() => setActiveTab('Alerts')} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                                                    View All
+                                                </Button>
+                                            )}
                                         </Box>
                                         <Typography variant="body2" sx={{ color: '#A3AED0', mt: 0.5, fontWeight: 500 }}>
-                                            Admin operational Alerts are temporarily unavailable.
+                                            Recent active operational Alerts across all organizations.
                                         </Typography>
+                                        {dashboardAlertsError && (
+                                            <Typography variant="caption" sx={{ color: '#D97706', mt: 1, display: 'block' }}>
+                                                Alerts could not be refreshed. Other dashboard data is unaffected.
+                                            </Typography>
+                                        )}
                                     </Box>
                                     <TableContainer component={Box} sx={{ px: 2, pb: 2, minHeight: 300 }}>
                                         <Table>
                                             <TableHead>
                                                 <TableRow sx={{ '& th': { backgroundColor: '#fff', fontWeight: 600, color: '#A3AED0', py: 2.5, borderBottom: '1px solid #E2E8F0', fontSize: '0.8rem', letterSpacing: 0.5 } }}>
-                                                    <TableCell width="15%">TIMESTAMP</TableCell>
-                                                    <TableCell width="15%">TENANT</TableCell>
-                                                    <TableCell width="15%">ROBOT ID</TableCell>
-                                                    <TableCell width="15%">ROBOT NAME</TableCell>
-                                                    <TableCell width="10%">SEVERITY</TableCell>
-                                                    <TableCell width="30%">MESSAGE</TableCell>
+                                                    <TableCell>CREATED</TableCell>
+                                                    <TableCell>TENANT</TableCell>
+                                                    <TableCell>ALERT</TableCell>
+                                                    <TableCell>ROBOT</TableCell>
+                                                    <TableCell>STATUS</TableCell>
+                                                    <TableCell>ASSIGNED TO</TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                                <TableRow>
-                                                    <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
-                                                        <NotificationsIcon sx={{ fontSize: 40, color: '#A3AED0', mb: 1 }} />
-                                                        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#718096' }}>
-                                                            Admin Alerts are temporarily disabled
-                                                        </Typography>
-                                                    </TableCell>
-                                                </TableRow>
+                                                {!canReadAdminAlerts || dashboardAlerts.length === 0 ? (
+                                                    <TableRow>
+                                                        <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                                                            <NotificationsIcon sx={{ fontSize: 40, color: '#A3AED0', mb: 1 }} />
+                                                            <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#718096' }}>
+                                                                {canReadAdminAlerts ? 'No active Alerts' : 'Admin Alert permission required'}
+                                                            </Typography>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ) : dashboardAlerts.map((alert) => (
+                                                    <TableRow key={alert.id} hover>
+                                                        <TableCell>{new Date(alert.createdAt).toLocaleString()}</TableCell>
+                                                        <TableCell sx={{ fontWeight: 700 }}>{alert.tenant.name}</TableCell>
+                                                        <TableCell>
+                                                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{alert.displayTitle}</Typography>
+                                                            <Typography variant="caption" color="text.secondary">{alert.event?.eventType || 'Unknown Event'}</Typography>
+                                                        </TableCell>
+                                                        <TableCell>{alert.event?.robot?.name || 'Unavailable'}</TableCell>
+                                                        <TableCell>
+                                                            <Chip
+                                                                size="small"
+                                                                label={alert.status === 'IN_PROGRESS' ? 'In Progress' : 'Open'}
+                                                                color={alert.status === 'IN_PROGRESS' ? 'warning' : 'error'}
+                                                            />
+                                                        </TableCell>
+                                                        <TableCell>{alert.assignedUser?.fullName || alert.assignedUser?.email || 'Unassigned'}</TableCell>
+                                                    </TableRow>
+                                                ))}
                                             </TableBody>
                                         </Table>
                                     </TableContainer>
@@ -538,7 +594,12 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                 )}
 
                 {activeTab === 'Alerts' && (
-                    <PermissionGate allowed={canAccessAlerts} deniedMessage="You do not have permission to view this page." />
+                    <PermissionGate allowed={canAccessAlerts} deniedMessage="You do not have permission to view this page.">
+                        <AdminAlertsTab
+                            canWrite={canWriteAdminAlerts}
+                            tenantOptions={tenants.map((tenant) => ({ id: tenant.id, name: tenant.name }))}
+                        />
+                    </PermissionGate>
                 )}
 
                 {activeTab === 'Settings' && (
