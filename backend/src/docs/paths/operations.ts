@@ -46,7 +46,7 @@ export const operationsPaths: OpenApiPaths = {
         post: publicOperation({
             operationId: "reportRobotEvent",
             summary: "Report a robot Event",
-            description: "Receives a source Event from a robot and queues its frame for processing. A qualifying Event may create a persistent Alert.",
+            description: "Receives a source Event from an active robot and queues its frame for processing. Archived Robots receive 409 before an Event, Alert, or Notification can be created. A qualifying Event may create a persistent Alert.",
             tags: ["Events"],
             requestBody: {
                 required: true,
@@ -81,6 +81,13 @@ export const operationsPaths: OpenApiPaths = {
                 }, {
                     message: "Event received and queued for processing",
                     eventId: "00000000-0000-4000-8000-000000000020",
+                }),
+                "409": jsonResponse("The Robot is archived; the uploaded frame is discarded and no operational record is created.", {
+                    type: "object",
+                    required: ["message"],
+                    properties: {
+                        message: { type: "string", enum: ["Robot is archived"] },
+                    },
                 }),
             },
         }, { validation: true }),
@@ -213,4 +220,3 @@ export const operationsPaths: OpenApiPaths = {
         }, { validation: true, notFound: true, conflict: true }),
     },
 };
-

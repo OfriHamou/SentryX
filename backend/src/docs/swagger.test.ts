@@ -36,6 +36,31 @@ describe("OpenAPI documentation", () => {
         ).toBe("#/components/schemas/OnCallCurrentShift");
     });
 
+    it("documents tenant-scoped Organization Robot management", () => {
+        const collection = openApiSpecification.paths["/api/organization/robots"];
+        const item = openApiSpecification.paths["/api/organization/robots/{id}"];
+        const restore = openApiSpecification.paths["/api/organization/robots/{id}/restore"];
+
+        expect(collection.get.security).toEqual([{ bearerAuth: [] }]);
+        expect(collection.post.security).toEqual([{ bearerAuth: [] }]);
+        expect(item.put.security).toEqual([{ bearerAuth: [] }]);
+        expect(item.delete.security).toEqual([{ bearerAuth: [] }]);
+        expect(restore.patch.security).toEqual([{ bearerAuth: [] }]);
+        expect(collection.get.description).toContain("organization_robots:read");
+        expect(collection.post.description).toContain("organization_robots:write");
+        expect(item.put.description).toContain("organization_robots:write");
+        expect(item.delete.description).toContain("organization_robots:write");
+        expect(restore.patch.description).toContain("organization_robots:write");
+        expect(collection.post.responses["201"]).toBeDefined();
+        expect(collection.post.responses["400"]).toBeDefined();
+        expect(item.put.responses["404"]).toBeDefined();
+        expect(item.put.responses["409"]).toBeDefined();
+        expect(item.delete.responses["200"].content["application/json"].schema.oneOf).toHaveLength(2);
+        expect(restore.patch.responses["404"]).toBeDefined();
+        expect(collection.get.parameters[0].schema.enum).toEqual(["active", "archived", "all"]);
+        expect(openApiSpecification.components.schemas.OrganizationRobot.properties.archivedAt).toBeDefined();
+    });
+
     it("serves the generated document without initializing the database", async () => {
         const app = express();
         mountDocumentationRoutes(app);

@@ -9,6 +9,28 @@ const arrayOf = (name: string): OpenApiObject => ({ type: "array", items: ref(na
 const userId = idParameter("Organization user UUID");
 const shiftId = idParameter("Security Shift UUID");
 const visitorId = idParameter("Visitor UUID");
+const robotId = idParameter("Robot UUID");
+const robotBody = {
+    type: "object",
+    additionalProperties: false,
+    required: ["name"],
+    properties: {
+        name: {
+            type: "string",
+            minLength: 1,
+            maxLength: 25,
+            description: "Required after trimming.",
+            example: "Lobby Robot",
+        },
+        location: {
+            type: "string",
+            maxLength: 35,
+            nullable: true,
+            description: "Optional. Empty or whitespace-only values are stored as null.",
+            example: "Main Lobby",
+        },
+    },
+};
 const shiftBody = {
     type: "object",
     required: ["name", "startAt", "endAt", "assignedUserId"],
@@ -91,6 +113,93 @@ export const organizationPaths: OpenApiPaths = {
                 }),
             },
         }),
+    },
+    "/api/organization/robots": {
+        get: secured({
+            operationId: "listOrganizationRobots",
+            summary: "List tenant Robots",
+            description: `${tenantScopedDescription} Requires organization_robots:read. Results are ordered by updatedAt descending, then name ascending.`,
+            tags: ["Organization", "Robots"],
+            parameters: [{
+                name: "state",
+                in: "query",
+                required: false,
+                description: "Lifecycle state. Defaults to active; this is independent from Robot connectivity status.",
+                schema: {
+                    type: "string",
+                    enum: ["active", "archived", "all"],
+                    default: "active",
+                },
+            }],
+            responses: {
+                "200": jsonResponse("Robots in the requested lifecycle state for the authenticated tenant.", arrayOf("OrganizationRobot")),
+            },
+        }, { validation: true }),
+        post: secured({
+            operationId: "createOrganizationRobot",
+            summary: "Create a tenant Robot",
+            description: `${tenantScopedDescription} Requires organization_robots:write. The backend generates the Robot UUID, derives the tenant from the JWT, sets status to Offline, and leaves lastConnection null. System-managed and routing fields are not accepted.`,
+            tags: ["Organization", "Robots"],
+            requestBody: jsonBody(robotBody),
+            responses: {
+                "201": jsonResponse("Created Robot.", ref("OrganizationRobot")),
+            },
+        }, { validation: true }),
+    },
+    "/api/organization/robots/{id}": {
+        put: secured({
+            operationId: "updateOrganizationRobot",
+            summary: "Update a tenant Robot",
+            description: `${tenantScopedDescription} Requires organization_robots:write. Only name and location can be updated; connectivity, identity, tenant, and routing fields remain system-managed. Archived Robots return 409 and must be restored before editing.`,
+            tags: ["Organization", "Robots"],
+            parameters: [robotId],
+            requestBody: jsonBody(robotBody),
+            responses: {
+                "200": jsonResponse("Updated Robot.", ref("OrganizationRobot")),
+            },
+        }, { validation: true, notFound: true, conflict: true }),
+        delete: secured({
+            operationId: "removeOrganizationRobot",
+            summary: "Safely remove a tenant Robot",
+            description: `${tenantScopedDescription} Requires organization_robots:write. This operation is transactional and idempotent. A Robot without Events or Notifications is permanently deleted; a Robot with either kind of operational history is archived instead. RobotConfig alone does not prevent deletion. No Event, Alert, or Notification history is deleted.`,
+            tags: ["Organization", "Robots"],
+            parameters: [robotId],
+            responses: {
+                "200": jsonResponse("Robot deleted or archived according to its operational history.", {
+                    oneOf: [
+                        {
+                            type: "object",
+                            required: ["action", "message"],
+                            properties: {
+                                action: { type: "string", enum: ["deleted"] },
+                                message: { type: "string", enum: ["Robot deleted permanently."] },
+                            },
+                        },
+                        {
+                            type: "object",
+                            required: ["action", "message", "robot"],
+                            properties: {
+                                action: { type: "string", enum: ["archived"] },
+                                message: { type: "string", enum: ["Robot has operational history and was moved to Archived."] },
+                                robot: ref("OrganizationRobot"),
+                            },
+                        },
+                    ],
+                }),
+            },
+        }, { notFound: true }),
+    },
+    "/api/organization/robots/{id}/restore": {
+        patch: secured({
+            operationId: "restoreOrganizationRobot",
+            summary: "Restore an archived tenant Robot",
+            description: `${tenantScopedDescription} Requires organization_robots:write. Restoring an archived Robot clears archivedAt and sets connectivity status to Offline. Repeating the request for an active Robot is safe and returns its current representation unchanged.`,
+            tags: ["Organization", "Robots"],
+            parameters: [robotId],
+            responses: {
+                "200": jsonResponse("Restored or already-active Robot.", ref("OrganizationRobot")),
+            },
+        }, { notFound: true }),
     },
     "/api/organization/users": {
         get: secured({

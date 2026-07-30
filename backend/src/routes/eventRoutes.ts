@@ -9,8 +9,7 @@ import path from "path";
 import { EventController } from "../controllers/EventController"; 
 import { isLoggedIn } from "../middleware/auth";
 import { hasAccess } from "../middleware/permission";
-import { AlertService } from "../services/AlertService";
-import { logger } from "../utils/logger";
+import { EventReportController } from "../controllers/EventReportController";
 
 const router = Router();
 
@@ -64,86 +63,9 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// POST endpoint
-router.post("/report", upload.single("frame"), async (req, res) => {
-    try {
-        const { robot_id, event_type, metadata } = req.body;
-        const file = req.file;
-
-        if (!file || !robot_id || !event_type) {
-            if (file) fs.unlinkSync(file.path); // Cleanup temp file
-            return res.status(400).json({ error: "Missing required fields (frame, robot_id, event_type)" });
-        }
-
-        const baseLocation = process.env.frames_to_process_save_location ||  "/tmp/sentryx/media/events/";
-        const targetDir = path.join(baseLocation, robot_id);
-
-        // Ensure target directory exists
-        if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true });
-        }
-
-        const eventId = uuidv4();
-        const ext = path.extname(file.originalname) || '.jpg';
-        const finalPath = path.join(targetDir, `${eventId}${ext}`);
-
-        // Move the file to its final destination
-        fs.renameSync(file.path, finalPath);
-
-        // Extract relative image path based on the base location
-        const imagePath = path.relative(baseLocation, finalPath);
-
-         // look up the robot's tenant so the event is tenant-scoped
-        const robotResult = await pool.query('SELECT tenant_id FROM robots WHERE id = $1', [robot_id]);
-        const tenantId = robotResult.rows[0]?.tenant_id ?? null;
-
-        // Insert into Postgres
-        const insertQuery = `
-            INSERT INTO events (id, tenant_id, robot_id, event_type, image_path, status) 
-            VALUES ($1, $2, $3, $4, $5, 'PENDING')
-        `;
-        await pool.query(insertQuery, [eventId, tenantId, robot_id, event_type, imagePath]);
-
-        // Add to BullMQ
-        await eventQueue.add("process-frame", {
-            eventId,
-            imagePath,
-            event_type,
-            metadata: metadata ? JSON.parse(metadata) : {}
-        });
-
-        if (AlertService.shouldCreateForEventType(event_type)) {
-            try {
-                if (!tenantId) {
-                    throw new Error(`Persisted Event ${eventId} has no tenant and cannot be linked to an Alert`);
-                }
-                await AlertService.createForEvent(eventId, tenantId);
-            } catch (alertError) {
-                console.error(`Failed to create Alert for persisted Event ${eventId}:`, alertError);
-                logger.error("Failed to create Alert for persisted Event", alertError, {
-                    category: "ALERTS",
-                    action: "CREATE_ALERT_FOR_EVENT_FAILED",
-                    status: "FAILED",
-                    context: "eventRoutes.report",
-                    metadata: { eventId, tenantId, eventType: event_type },
-                });
-            }
-        }
-
-        // Return 201 Created immediately
-        return res.status(201).json({
-            message: "Event received and queued for processing",
-            eventId
-        });
-
-    } catch (error) {
-        console.error("Error processing event report:", error);
-        return res.status(500).json({ error: "Internal server error" });
-    }
-});
+router.post("/report", upload.single("frame"), EventReportController.report(pool, eventQueue));
 
 router.get("/", isLoggedIn, hasAccess("events", "read"), EventController.getEvents);
 router.get("/:id/image", EventController.getEventImage);
 
 export default router;
-
