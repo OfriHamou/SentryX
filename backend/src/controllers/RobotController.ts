@@ -5,6 +5,7 @@ import type { AuthIdentityPayload } from "../auth/types";
 import { logger } from "../utils/logger";
 import { AppDataSource } from "../db";
 import { Robot } from "../models/Robot";
+import { IsNull } from "typeorm";
 
 function requireEnvVariable(name: string): string {
     const value = process.env[name];
@@ -292,7 +293,7 @@ export class RobotController {
         }
         try {
             const robot = await AppDataSource.getRepository(Robot).findOne({
-                where: { tenant: { id: auth.tenantId } },
+                where: { tenant: { id: auth.tenantId }, archivedAt: IsNull() },
                 order: { updatedAt: "DESC" },
             });
             if (!robot) return res.status(404).json({ ok: false, error: "No robot for tenant" });
@@ -314,7 +315,7 @@ export class RobotController {
         try {
             const repo = AppDataSource.getRepository(Robot);
             const robot = await repo.findOne({
-                where: { tenant: { id: auth.tenantId } },
+                where: { tenant: { id: auth.tenantId }, archivedAt: IsNull() },
                 order: { updatedAt: "DESC" },
             });
             if (!robot) return res.status(404).json({ ok: false, error: "No robot for tenant" });

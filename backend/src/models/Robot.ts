@@ -7,6 +7,7 @@ import { RobotConfig } from "./RobotConfig";
 @Entity("robots")
 @Index("idx_robots_tenant", ["tenant"])
 @Index("idx_robots_status", ["status"])
+@Index("idx_robots_tenant_archived_at", ["tenant", "archivedAt"])
 export class Robot {
     @PrimaryGeneratedColumn("uuid")
     id: string;
@@ -29,6 +30,9 @@ export class Robot {
 
     @Column({ name: "last_connection", type: "timestamp with time zone", nullable: true })
     lastConnection: Date;
+
+    @Column({ name: "archived_at", type: "timestamp with time zone", nullable: true })
+    archivedAt: Date | null;
 
     @UpdateDateColumn({ name: "updated_at", type: "timestamp with time zone" })
     updatedAt: Date;

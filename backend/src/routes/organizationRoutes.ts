@@ -3,6 +3,7 @@ import multer from "multer";
 import { OrganizationController } from "../controllers/OrganizationController";
 import { SecurityShiftController } from "../controllers/SecurityShiftController";
 import { VisitorController } from "../controllers/VisitorController";
+import { OrganizationRobotController } from "../controllers/OrganizationRobotController";
 import { requireAuth } from "../middleware/auth";
 import { hasAccess } from "../middleware/permission";
 
@@ -39,6 +40,16 @@ router.post("/users", requireAuth, hasAccess("organization_users", "write"), Org
 router.put("/users/:id", requireAuth, hasAccess("organization_users", "write"), OrganizationController.updateOrganizationUser);
 
 router.get("/roles", requireAuth, hasAccess("organization_users", "read"), OrganizationController.getOrganizationRoles);
+
+router.get("/robots", requireAuth, hasAccess("organization_robots", "read"), OrganizationRobotController.list);
+
+router.post("/robots", requireAuth, hasAccess("organization_robots", "write"), OrganizationRobotController.create);
+
+router.put("/robots/:id", requireAuth, hasAccess("organization_robots", "write"), OrganizationRobotController.update);
+
+router.delete("/robots/:id", requireAuth, hasAccess("organization_robots", "write"), OrganizationRobotController.remove);
+
+router.patch("/robots/:id/restore", requireAuth, hasAccess("organization_robots", "write"), OrganizationRobotController.restore);
 
 router.get("/security-shifts", requireAuth, hasAccess("organization_security_shifts", "read"), SecurityShiftController.list);
 

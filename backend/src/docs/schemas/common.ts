@@ -106,6 +106,25 @@ export const commonSchemas: Record<string, OpenApiObject> = {
             updatedAt: dateTime,
         },
     },
+    OrganizationRobot: {
+        type: "object",
+        description: "Tenant-scoped Robot management view. Connectivity fields are system-managed.",
+        required: ["id", "name", "location", "status", "lastConnection", "updatedAt", "archivedAt"],
+        properties: {
+            id: uuid,
+            name: { type: "string", maxLength: 25, example: "Lobby Robot" },
+            location: { type: "string", maxLength: 35, nullable: true, example: "Main lobby" },
+            status: { type: "string", readOnly: true, example: "Offline" },
+            lastConnection: { ...dateTime, nullable: true, readOnly: true },
+            updatedAt: { ...dateTime, readOnly: true },
+            archivedAt: {
+                ...dateTime,
+                nullable: true,
+                readOnly: true,
+                description: "Lifecycle archive timestamp. Null means active.",
+            },
+        },
+    },
     Event: {
         type: "object",
         required: ["id", "eventType", "status", "createdAt"],
