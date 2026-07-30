@@ -87,6 +87,30 @@ describe("OpenAPI documentation", () => {
         ]);
     });
 
+    it("documents dedicated read-only platform Admin Analytics", () => {
+        const analytics = openApiSpecification.paths["/api/admin/analytics"].get;
+
+        expect(analytics.security).toEqual([{ bearerAuth: [] }]);
+        expect(analytics.description).toContain("admin_analytics:read");
+        expect(analytics.description).toContain("not detection accuracy");
+        expect(analytics.description).toContain("current state");
+        expect(analytics.parameters.map((parameter: { name?: string }) => parameter.name))
+            .toEqual(["tenantId", "from", "to"]);
+        expect(analytics.responses["200"]).toBeDefined();
+        expect(analytics.responses["400"]).toBeDefined();
+        expect(analytics.responses["401"]).toBeDefined();
+        expect(analytics.responses["403"]).toBeDefined();
+        expect(analytics.responses["500"]).toBeDefined();
+        expect(
+            openApiSpecification.components.schemas.AdminAnalyticsResponse
+                .properties.metrics.properties.faceRecognitionSuccessRate.nullable
+        ).toBe(true);
+        expect(
+            openApiSpecification.components.schemas.AdminAnalyticsResponse
+                .properties.metrics.properties.averageResolutionMinutes.nullable
+        ).toBe(true);
+    });
+
     it("serves the generated document without initializing the database", async () => {
         const app = express();
         mountDocumentationRoutes(app);
