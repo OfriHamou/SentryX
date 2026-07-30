@@ -27,6 +27,7 @@ import eventRoutes from "./routes/eventRoutes";
 import faceRoutes from "./routes/faceRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import alertRoutes from "./routes/alertRoutes";
+import adminAlertRoutes from "./routes/adminAlertRoutes";
 import onCallRoutes from "./routes/onCallRoutes";
 import { logger } from "./utils/logger";
 import { mountDocumentationRoutes } from "./docs/routes";
@@ -92,6 +93,9 @@ function initializeRoutes(app: express.Application) {
 
     // Mount operational Alert routes under /api/alerts
     app.use("/api/alerts", alertRoutes);
+
+    // Mount platform-wide Admin Alert routes separately from tenant Alerts.
+    app.use("/api/admin/alerts", adminAlertRoutes);
 
     // Mount Customer operational OnCall routes under /api/on-call
     app.use("/api/on-call", onCallRoutes);

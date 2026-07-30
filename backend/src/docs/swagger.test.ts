@@ -61,6 +61,32 @@ describe("OpenAPI documentation", () => {
         expect(openApiSpecification.components.schemas.OrganizationRobot.properties.archivedAt).toBeDefined();
     });
 
+    it("documents dedicated platform-wide Admin Alert management", () => {
+        const collection = openApiSpecification.paths["/api/admin/alerts"].get;
+        const details = openApiSpecification.paths["/api/admin/alerts/{id}"].get;
+        const status = openApiSpecification.paths["/api/admin/alerts/{id}/status"].patch;
+        const image = openApiSpecification.paths["/api/admin/alerts/{id}/image"].get;
+
+        expect(collection.security).toEqual([{ bearerAuth: [] }]);
+        expect(collection.description).toContain("admin_alerts:read");
+        expect(collection.description).toContain("not restricted");
+        expect(status.description).toContain("admin_alerts:write");
+        expect(details.responses["404"]).toBeDefined();
+        expect(status.responses["409"]).toBeDefined();
+        expect(image.responses["200"].content["image/jpeg"]).toBeDefined();
+        expect(collection.parameters.map((parameter: { name?: string; $ref?: string }) =>
+            parameter.name || parameter.$ref
+        )).toEqual([
+            "status",
+            "tenantId",
+            "from",
+            "to",
+            "search",
+            "#/components/parameters/Limit",
+            "#/components/parameters/Offset",
+        ]);
+    });
+
     it("serves the generated document without initializing the database", async () => {
         const app = express();
         mountDocumentationRoutes(app);
