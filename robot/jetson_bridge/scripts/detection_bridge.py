@@ -7,7 +7,6 @@ import time
 import urllib.request
 import urllib.error
 import uuid
-import numpy as np
 from datetime import datetime, timezone
 import threading
 
@@ -17,11 +16,9 @@ app = Flask(__name__)
 
 EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
-FRAME_URL = os.environ.get("VIDEO_FRAME_URL", "http://127.0.0.1:5001/frame")
+STREAM_URL = "http://127.0.0.1:5001/video_feed"
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:4000").rstrip("/")
 ROBOT_ID = os.environ.get("ROBOT_ID", "be0ca78d-eff9-422b-8e07-7fdb50835185")
-DETECTION_INTERVAL_SECONDS = float(os.environ.get("DETECTION_INTERVAL_SECONDS", "0.25"))
-ABSENCE_FRAMES_TO_CLEAR = max(1, int(os.environ.get("ABSENCE_FRAMES_TO_CLEAR", "3")))
 
 os.makedirs(EVENTS_DIR, exist_ok=True)
 
@@ -231,66 +228,62 @@ def list_events():
 
     return events
 
-
-def fetch_latest_frame():
-    try:
-        with urllib.request.urlopen(FRAME_URL, timeout=5) as response:
-            jpg_bytes = response.read()
-    except Exception:
-        return None
-
-    jpg_array = np.frombuffer(jpg_bytes, dtype=np.uint8)
-    if jpg_array.size == 0:
-        return None
-
-    return cv2.imdecode(jpg_array, cv2.IMREAD_COLOR)
-
-
 def detection_loop():
     global latest_event
 
-    frames_without_detections = ABSENCE_FRAMES_TO_CLEAR
-    event_armed = True
+    cap = None
 
     while True:
-        frame = fetch_latest_frame()
-        if frame is None:
+        if cap is None or not cap.isOpened():
+            cap = cv2.VideoCapture(STREAM_URL)
+            time.sleep(1.0)
+
+            with state_lock:
+                latest_status["camera_opened"] = cap.isOpened()
+                if not cap.isOpened():
+                    latest_status["faces_detected"] = 0
+                    latest_status["detections"] = []
+
+            if not cap.isOpened():
+                time.sleep(1.0)
+                continue
+
+        ok, frame = cap.read()
+
+        if not ok or frame is None:
             with state_lock:
                 latest_status["camera_opened"] = False
                 latest_status["faces_detected"] = 0
                 latest_status["detections"] = []
-            frames_without_detections = ABSENCE_FRAMES_TO_CLEAR
-            event_armed = True
-            time.sleep(0.5)
+
+            try:
+                cap.release()
+            except Exception:
+                pass
+
+            cap = None
+            time.sleep(0.1)
             continue
 
         detections = detector.detect_faces(frame)
 
-        if detections:
-            frames_without_detections = 0
-            event = save_event(frame, detections) if event_armed else None
+        with state_lock:
+            latest_status["camera_opened"] = True
+            latest_status["faces_detected"] = len(detections)
+            latest_status["detections"] = detections
 
-            with state_lock:
-                latest_status["camera_opened"] = True
-                latest_status["faces_detected"] = len(detections)
-                latest_status["detections"] = detections
+            if detections:
                 latest_status["last_detection_time"] = datetime.now(timezone.utc).isoformat()
 
-            if event_armed and event is not None:
+        if detections:
+            event = save_event(frame, detections)
+
+            if event is not None:
                 with state_lock:
                     latest_event = event
                     latest_status["last_event_id"] = event["id"]
-                event_armed = False
-        else:
-            frames_without_detections += 1
-            if frames_without_detections >= ABSENCE_FRAMES_TO_CLEAR:
-                with state_lock:
-                    latest_status["camera_opened"] = True
-                    latest_status["faces_detected"] = 0
-                    latest_status["detections"] = []
-                event_armed = True
 
-        time.sleep(DETECTION_INTERVAL_SECONDS)
+        time.sleep(0.1)
 
 @app.route("/health", methods=["GET"])
 def health():
