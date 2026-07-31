@@ -71,6 +71,11 @@ export default function MovementControls({ canWrite }: MovementControlsProps) {
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{speed}%</Typography>
                         </Stack>
                         <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={!canWrite} />
+                        {!canWrite && (
+                            <Typography variant="caption" color="text.secondary">
+                                Speed controls disabled during Auto Patrol
+                            </Typography>
+                        )}
                     </Box>
 
                     {/* Go to location — PREPARED, needs autonomous nav */}

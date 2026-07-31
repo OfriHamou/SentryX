@@ -60,3 +60,24 @@ export const getEventHistory = async (): Promise<RobotEvent[]> => {
     const response = await customerApi.get<{ ok: boolean; events: RobotEvent[] }>('/events');
     return response.data.events ?? [];
 };
+
+// Auto Patrol endpoints
+export const getAutoPatrolStatus = async () => {
+    const response = await robotApi.get('/robot/autopatrol/status');
+    return response.data;
+};
+
+export const getAutoPatrolHealth = async () => {
+    const response = await robotApi.get('/robot/autopatrol/health');
+    return response.data;
+};
+
+export const startAutoPatrol = async () => {
+    const response = await robotApi.post('/robot/autopatrol/start');
+    return response.data;
+};
+
+export const stopAutoPatrol = async () => {
+    const response = await robotApi.post('/robot/autopatrol/stop');
+    return response.data;
+};
