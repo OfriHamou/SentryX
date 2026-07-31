@@ -17,7 +17,6 @@ interface ActionPanelProps {
     volume: number;
     onVolumeChange: (value: number) => void;
     canControl: boolean;
-    manualControlEnabled: boolean;
 }
 
 export default function ActionPanel({
@@ -27,7 +26,6 @@ export default function ActionPanel({
     volume,
     onVolumeChange,
     canControl,
-    manualControlEnabled,
 }: ActionPanelProps) {
     const [talking, setTalking] = useState(false);
     const { move, stop } = useRobotMove();
@@ -43,11 +41,6 @@ export default function ActionPanel({
             {!canControl && (
                 <Alert severity="info" sx={{ borderRadius: 2 }}>
                     Read-only live access
-                </Alert>
-            )}
-            {canControl && !manualControlEnabled && (
-                <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                    Auto mode is active. Live joystick control is disabled.
                 </Alert>
             )}
             <Button
@@ -111,7 +104,7 @@ export default function ActionPanel({
             />
             </Box>
             <Box sx={{ pt: 2 }}>
-                {manualControlEnabled && <JoystickControl size={140} onMove={move} onStop={stop} />}
+                {canControl && <JoystickControl size={140} onMove={move} onStop={stop} />}
             </Box>
         </Stack>
     );
