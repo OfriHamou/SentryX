@@ -35,8 +35,8 @@ export const getLatestEvent = async () => {
 };
 
 export const getEvents = async () => {
-    const response = await customerApi.get<{ ok: boolean; events: RobotEvent[] }>(
-        '/events'
+    const response = await robotApi.get<{ ok: boolean; events: RobotEvent[] }>(
+        '/robot/events'
     );
     return response.data;
 };
@@ -57,6 +57,6 @@ export const stopRobot = async () => {
 };
 
 export const getEventHistory = async (): Promise<RobotEvent[]> => {
-    const response = await getEvents();
-    return response.events ?? [];
+    const response = await customerApi.get<{ ok: boolean; events: RobotEvent[] }>('/events');
+    return response.data.events ?? [];
 };
