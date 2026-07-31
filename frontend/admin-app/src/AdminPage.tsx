@@ -29,6 +29,7 @@ import { PermissionGate } from './components/PermissionGate';
 import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
 import { LicensesTab } from './components/LicensesTab';
 import { AdminAlertsTab } from './components/AdminAlertsTab';
+import { AdminAnalyticsTab } from './components/AdminAnalyticsTab';
 import BellNotifications from './components/BellNotifications';
 import { getAdminAlerts } from './api/adminAlerts';
 import type { AdminAlert, AdminAlertCounts } from './types/adminAlert';
@@ -96,7 +97,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
     const canWriteAdminAlerts = hasPermission(user?.allowedPages, 'admin_alerts', 'write');
     const canAccessDashboard = canRead('dashboard') || canReadTenants || canReadLicenses || canReadAdminAlerts;
     const canAccessTenants = canReadTenants;
-    const canAccessAnalytics = canRead('analytics') || canRead('reports');
+    const canAccessAnalytics = canRead('admin_analytics');
     const canAccessAlerts = canReadAdminAlerts;
     const canAccessSettings = canRead('settings') || canRead('roles');
     const canAccessRegistrationRequests = canRead('registration_requests');
@@ -248,7 +249,7 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                           { text: 'Dashboard', icon: <DashboardIcon /> },
                           { text: 'Tenants', icon: <PeopleIcon /> },
                           { text: 'Analytics', icon: <AssessmentIcon /> }
-                        ].map((item) => (
+                        ].filter((item) => item.text !== 'Analytics' || canAccessAnalytics).map((item) => (
                             <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
                                 <ListItemButton
                                     onClick={() => setActiveTab(item.text)}
@@ -296,8 +297,8 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
             {/* Main Content Workspace */}
             <Box component="main" sx={{ flexGrow: 1, p: { xs: 2, md: 4 }, width: `calc(100% - ${drawerWidth}px)`, backgroundColor: '#F4F7FE' }}>
                 {/* Header Profile Row */}
-                <Box sx={{ display: 'flex', justifyContent: activeTab === 'Alerts' ? 'flex-end' : 'space-between', alignItems: 'center', mb: activeTab === 'Alerts' ? 3 : 5 }}>
-                    {activeTab !== 'Alerts' && (
+                <Box sx={{ display: 'flex', justifyContent: ['Alerts', 'Analytics'].includes(activeTab) ? 'flex-end' : 'space-between', alignItems: 'center', mb: ['Alerts', 'Analytics'].includes(activeTab) ? 3 : 5 }}>
+                    {!['Alerts', 'Analytics'].includes(activeTab) && (
                         <Box>
                             <Typography variant="h4" sx={{ fontWeight: 800, color: '#2B3674' }}>
                                 {activeTab}
@@ -576,7 +577,11 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                 )}
 
                 {activeTab === 'Analytics' && (
-                    <PermissionGate allowed={canAccessAnalytics} deniedMessage="You do not have permission to view this page." />
+                    <PermissionGate allowed={canAccessAnalytics} deniedMessage="You do not have permission to view this page.">
+                        <AdminAnalyticsTab
+                            tenantOptions={tenants.map((tenant) => ({ id: tenant.id, name: tenant.name }))}
+                        />
+                    </PermissionGate>
                 )}
 
                 {activeTab === 'Registration Requests' && (
