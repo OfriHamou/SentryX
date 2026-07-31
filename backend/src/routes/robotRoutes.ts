@@ -17,6 +17,13 @@ router.get("/video", RobotController.getVideoStream);
 // Detection service
 router.get("/detection/health", RobotController.getDetectionHealth);
 router.get("/detection/status", RobotController.getDetectionStatus);
+
+// Auto Patrol service
+router.get("/autopatrol/health", RobotController.getAutoPatrolHealth);
+router.get("/autopatrol/status", RobotController.getAutoPatrolStatus);
+router.post("/autopatrol/start", isLoggedIn, hasAccess("control", "write"), RobotController.startAutoPatrol);
+router.post("/autopatrol/stop", isLoggedIn, hasAccess("control", "write"), RobotController.stopAutoPatrol);
+
 router.get("/current", isLoggedIn, hasAccess("robots", "read"), RobotController.getMyRobot);
 router.put("/current", isLoggedIn, hasAccess("robots", "write"), RobotController.updateMyRobot);
 
