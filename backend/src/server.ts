@@ -28,6 +28,7 @@ import faceRoutes from "./routes/faceRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import alertRoutes from "./routes/alertRoutes";
 import adminAlertRoutes from "./routes/adminAlertRoutes";
+import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes";
 import onCallRoutes from "./routes/onCallRoutes";
 import { logger } from "./utils/logger";
 import { mountDocumentationRoutes } from "./docs/routes";
@@ -96,6 +97,9 @@ function initializeRoutes(app: express.Application) {
 
     // Mount platform-wide Admin Alert routes separately from tenant Alerts.
     app.use("/api/admin/alerts", adminAlertRoutes);
+
+    // Mount read-only, platform-wide Admin Analytics separately from tenant APIs.
+    app.use("/api/admin/analytics", adminAnalyticsRoutes);
 
     // Mount Customer operational OnCall routes under /api/on-call
     app.use("/api/on-call", onCallRoutes);

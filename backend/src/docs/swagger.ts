@@ -2,8 +2,10 @@ import swaggerJsdoc from "swagger-jsdoc";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { commonParameters, commonResponses, commonSchemas } from "./schemas/common";
 import { operationSchemas } from "./schemas/operations";
+import { adminAnalyticsSchemas } from "./schemas/adminAnalytics";
 import { administrationPaths } from "./paths/administration";
 import { adminAlertPaths } from "./paths/adminAlerts";
+import { adminAnalyticsPaths } from "./paths/adminAnalytics";
 import { authenticationPaths } from "./paths/authentication";
 import { facePaths } from "./paths/faces";
 import { healthPaths } from "./paths/health";
@@ -56,6 +58,10 @@ const definition: OpenApiObject = {
             description: "Platform-wide Alert management protected by the dedicated admin_alerts permission.",
         },
         {
+            name: "Admin Analytics",
+            description: "Read-only platform performance reporting protected by admin_analytics:read.",
+        },
+        {
             name: "OnCall / Shift Duty",
             description: "An OnCall task is an existing Alert assigned to a Security Operator, not a separate Task entity.",
         },
@@ -75,6 +81,7 @@ const definition: OpenApiObject = {
         schemas: {
             ...commonSchemas,
             ...operationSchemas,
+            ...adminAnalyticsSchemas,
         },
         parameters: commonParameters,
         responses: commonResponses,
@@ -84,6 +91,7 @@ const definition: OpenApiObject = {
         ...authenticationPaths,
         ...administrationPaths,
         ...adminAlertPaths,
+        ...adminAnalyticsPaths,
         ...organizationPaths,
         ...operationsPaths,
         ...onCallPaths,
