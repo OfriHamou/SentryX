@@ -12,7 +12,6 @@ import { useEvents } from '../hooks/robot/useEvents';
 import { useFullscreen } from '../hooks/useFullscreen';
 import FullscreenControls from '../components/live/fullscreen/FullscreenControls';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
-import { useControlMode } from '../hooks/robot/useControlMode';
 
 export default function Live() {
     const { user } = useCustomerAuth();
@@ -20,13 +19,11 @@ export default function Live() {
     const { data: robot } = useRobot();
     const { data: detection } = useDetectionStatus();
     const { data: events, loading: eventsLoading, error: eventsError } = useEvents();
-    const { data: controlMode } = useControlMode();
     const [volume, setVolume] = useState(50);
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const { isFullscreen, enterFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
     const location = useLocation();
     const canWriteControl = hasCustomerPermission(user?.allowedPages, 'control', 'write');
-    const manualControlEnabled = canWriteControl && controlMode?.mode !== 'auto';
 
     useEffect(() => {
         if (location.state?.fullscreen) {
@@ -96,7 +93,6 @@ export default function Live() {
                         onAlarm={() => console.log('alarm triggered')}
                         onCallEmergency={() => console.log('emergency call triggered')}
                         onTalkToggle={(talking) => console.log('talk toggle', talking)}
-                        manualControlEnabled={manualControlEnabled}
                         />
                     )}
                 </Box>
@@ -109,7 +105,6 @@ export default function Live() {
                         volume={volume}
                         onVolumeChange={setVolume}
                         canControl={canWriteControl}
-                        manualControlEnabled={manualControlEnabled}
                 />
             </Paper>
 

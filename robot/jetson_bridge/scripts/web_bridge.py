@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-import os
-import sys
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROBOT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-if ROBOT_ROOT not in sys.path:
-    sys.path.insert(0, ROBOT_ROOT)
-
 from flask import Flask, request, jsonify
 import rospy
 from jetbotmini_msgs.srv import Motor
 from jetbotmini_msgs.msg import Battery
 import threading
 
-from jetson_bridge.motor_control import MotorController
-
-CONTROL_MODE_MANUAL = "manual"
-CONTROL_MODE_AUTO = "auto"
-
 app = Flask(__name__)
+
+# --- Tuning knobs ---
+SCALE = 1.0        # keep 1.0 for now since 0.6 already works
+DEADZONE = 0.6     # minimum motor command that actually moves
+MAX_OUT = 1.0      # keep within [-1,1] unless you discover higher works
 
 # --- Shared battery state ---
 latest_voltage = None
 battery_lock = threading.Lock()
-control_mode = CONTROL_MODE_MANUAL
-control_mode_lock = threading.Lock()
+
+def clamp(x, lo, hi):
+    return max(lo, min(hi, x))
+
+def apply_deadzone(x):
+    # If command is tiny, treat as stop
+    if abs(x) < 0.05:
+        return 0.0
+    # If command is non-zero but below deadzone, push it to deadzone
+    if 0.0 < abs(x) < DEADZONE:
+        return DEADZONE if x > 0 else -DEADZONE
+    return x
 
 def voltage_to_status(voltage):
     if voltage is None:
@@ -60,43 +62,34 @@ rospy.Subscriber("/voltage", Battery, battery_callback)
 # Keep existing motor service flow
 rospy.wait_for_service("/Motor")
 motor_srv = rospy.ServiceProxy("/Motor", Motor)
-motor_controller = MotorController(motor_srv)
-
-
-def get_control_mode():
-    with control_mode_lock:
-        return control_mode
-
-
-def set_control_mode(mode):
-    global control_mode
-    with control_mode_lock:
-        control_mode = mode
 
 @app.route("/api/move", methods=["POST"])
 def api_move():
-    if get_control_mode() != CONTROL_MODE_MANUAL:
-        return jsonify({
-            "ok": False,
-            "error": "Auto mode currently owns motor control",
-            "mode": get_control_mode(),
-        }), 409
-
     data = request.get_json(silent=True) or {}
 
     speed = float(data.get("speed", 0.0))       # [-1..1]
     rotation = float(data.get("rotation", 0.0)) # [-1..1]
 
+    speed = clamp(speed, -1.0, 1.0)
+    rotation = clamp(rotation, -1.0, 1.0)
+
+    # Differential drive
+    left = (speed - rotation) * SCALE
+    right = (speed + rotation) * SCALE
+
+    left = clamp(left, -MAX_OUT, MAX_OUT)
+    right = clamp(right, -MAX_OUT, MAX_OUT)
+
+    # Apply deadzone so the robot actually moves
+    left = apply_deadzone(left)
+    right = apply_deadzone(right)
+
     try:
-        resp, command = motor_controller.move(speed, rotation)
+        resp = motor_srv(rightspeed=right, leftspeed=left)
         return jsonify({
             "ok": True,
-            "mode": get_control_mode(),
-            "inputs": {"speed": command["speed"], "rotation": command["rotation"]},
-            "outputs": {
-                "rightspeed": command["rightspeed"],
-                "leftspeed": command["leftspeed"],
-            },
+            "inputs": {"speed": speed, "rotation": rotation},
+            "outputs": {"rightspeed": right, "leftspeed": left},
             "result": bool(resp.result)
         })
     except Exception as e:
@@ -105,38 +98,8 @@ def api_move():
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
     try:
-        resp = motor_controller.stop()
-        return jsonify({"ok": True, "mode": get_control_mode(), "result": bool(resp.result)})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/control-mode", methods=["GET"])
-def api_get_control_mode():
-    return jsonify({
-        "ok": True,
-        "mode": get_control_mode(),
-    })
-
-
-@app.route("/api/control-mode", methods=["POST"])
-def api_set_control_mode():
-    data = request.get_json(silent=True) or {}
-    mode = str(data.get("mode", "")).strip().lower()
-
-    if mode not in (CONTROL_MODE_MANUAL, CONTROL_MODE_AUTO):
-        return jsonify({
-            "ok": False,
-            "error": "mode must be 'manual' or 'auto'",
-        }), 400
-
-    try:
-        motor_controller.stop()
-        set_control_mode(mode)
-        return jsonify({
-            "ok": True,
-            "mode": get_control_mode(),
-        })
+        resp = motor_srv(rightspeed=0.0, leftspeed=0.0)
+        return jsonify({"ok": True, "result": bool(resp.result)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -168,8 +131,7 @@ def health():
 
     return jsonify({
         "ok": True,
-        "battery_data_received": has_battery_data,
-        "control_mode": get_control_mode(),
+        "battery_data_received": has_battery_data
     })
 
 if __name__ == "__main__":

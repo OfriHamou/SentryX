@@ -5,21 +5,18 @@ import { useFullscreen } from '../../hooks/useFullscreen';
 import JoystickControl from '../live/JoystickControl';
 import { useRobotMove } from '../../hooks/robot/useRobotMove';
 import { videoStreamUrl } from '../../api/robot';
-import type { MoveInput, RobotControlMode } from '../../types/robot';
+import type { MoveInput } from '../../types/robot';
 
 interface MovementControlsProps {
     canWrite: boolean;
-    controlMode: RobotControlMode;
-    transitionInProgress: boolean;
 }
 
-export default function MovementControls({ canWrite, controlMode, transitionInProgress }: MovementControlsProps) {
+export default function MovementControls({ canWrite }: MovementControlsProps) {
     const { move, stop } = useRobotMove();
     const [speed, setSpeed] = useState(50);
     const videoRef = useRef<HTMLDivElement>(null);
     const { toggleFullscreen } = useFullscreen(videoRef);
     const [videoError, setVideoError] = useState(false);
-    const manualControlEnabled = canWrite && controlMode === 'manual' && !transitionInProgress;
 
     // speed slider scales the joystick output (real)
     const handleMove = (input: MoveInput) => {
@@ -33,16 +30,6 @@ export default function MovementControls({ canWrite, controlMode, transitionInPr
             {!canWrite && (
                 <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
                     Read-only control access
-                </Alert>
-            )}
-            {canWrite && controlMode === 'auto' && (
-                <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                    Auto mode currently owns motor control. Joystick movement is disabled.
-                </Alert>
-            )}
-            {transitionInProgress && (
-                <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
-                    Switching control modes. Movement controls are temporarily disabled.
                 </Alert>
             )}
 
@@ -73,15 +60,7 @@ export default function MovementControls({ canWrite, controlMode, transitionInPr
                     </Box>
 
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Directional Control</Typography>
-                    {manualControlEnabled ? (
-                        <JoystickControl size={150} onMove={handleMove} onStop={stop} />
-                    ) : (
-                        <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, textAlign: 'center', color: 'text.secondary' }}>
-                            <Typography variant="body2">
-                                {controlMode === 'auto' ? 'Manual joystick disabled while auto mode is active' : 'Manual joystick unavailable'}
-                            </Typography>
-                        </Paper>
-                    )}
+                    {canWrite && <JoystickControl size={150} onMove={handleMove} onStop={stop} />}
                 </Grid>
 
                 {/* Right: speed + go-to-location + tips */}
@@ -91,7 +70,7 @@ export default function MovementControls({ canWrite, controlMode, transitionInPr
                             <Typography variant="body2" color="text.secondary">Speed</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{speed}%</Typography>
                         </Stack>
-                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={!manualControlEnabled} />
+                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={!canWrite} />
                     </Box>
 
                     {/* Go to location — PREPARED, needs autonomous nav */}

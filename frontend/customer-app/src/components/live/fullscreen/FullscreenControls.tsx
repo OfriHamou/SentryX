@@ -15,7 +15,6 @@ interface FullscreenControlsProps {
     onTalkToggle: (active: boolean) => void;
     onAlarm: () => void;
     onCallEmergency: () => void;
-    manualControlEnabled: boolean;
 }
 
 export default function FullscreenControls({
@@ -23,7 +22,6 @@ export default function FullscreenControls({
     onTalkToggle,
     onAlarm,
     onCallEmergency,
-    manualControlEnabled,
 }: FullscreenControlsProps) {
     const [talking, setTalking] = useState(false);
     const { move, stop } = useRobotMove();
@@ -75,24 +73,22 @@ export default function FullscreenControls({
             </Box>
 
             {/* Joystick controls - bottom right */}
-            {manualControlEnabled && (
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        bottom: 36,
-                        right: 36,
-                        zIndex: 10,
-                    }}
-                >
-                    <JoystickControl
-                        size={120}
-                        onMove={move}
-                        onStop={stop}
-                        baseColor='rgba(255,255,255,0.2)'
-                        stickColor='#ffffff'
-                    />
-                </Box>
-            )}
+            <Box
+                sx={{
+                    position: 'absolute',
+                    bottom: 36,
+                    right: 36,
+                    zIndex: 10,
+                }}
+            >
+                <JoystickControl
+                    size={120}
+                    onMove={move}
+                    onStop={stop}
+                    baseColor='rgba(255,255,255,0.2)'
+                    stickColor='#ffffff'
+                />
+            </Box>
         </>
     );
 }        
