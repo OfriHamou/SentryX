@@ -84,14 +84,14 @@ class YahboomObjectDetector(object):
         try:
             self.detection_graph = tf.Graph()
             with self.detection_graph.as_default():
-                od_graph_def = tf.GraphDef()
-                with tf.gfile.GFile(self.model_path, 'rb') as fid:
+                od_graph_def = tf.compat.v1.GraphDef()
+                with tf.compat.v1.gfile.GFile(self.model_path, 'rb') as fid:
                     serialized_graph = fid.read()
                     od_graph_def.ParseFromString(serialized_graph)
                     tf.import_graph_def(od_graph_def, name='')
             
             # Create session in default config
-            self.session = tf.Session(graph=self.detection_graph)
+            self.session = tf.compat.v1.Session(graph=self.detection_graph)
         except Exception as e:
             raise IOError("Failed to load TensorFlow model: {}".format(e))
     

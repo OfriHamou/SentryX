@@ -311,6 +311,7 @@ def perform_avoidance():
 def patrol_loop():
     """Main patrol loop: detect, decide, move."""
     global obstacle_counter
+    global active
     
     obstacle_counter = 0
     
