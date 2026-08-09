@@ -250,6 +250,11 @@ def detection_loop():
                 time.sleep(1.0)
                 continue
 
+        now = time.time()
+        remaining = FACE_DETECTION_INTERVAL_SECONDS - (now - last_detection_run)
+        if remaining > 0:
+            time.sleep(remaining)
+
         ok, frame = cap.read()
 
         if not ok or frame is None:
@@ -270,10 +275,7 @@ def detection_loop():
         with state_lock:
             latest_status["camera_opened"] = True
 
-        now = time.time()
-        if (now - last_detection_run) < FACE_DETECTION_INTERVAL_SECONDS:
-            continue
-        last_detection_run = now
+        last_detection_run = time.time()
 
         detections = detector.detect_faces(frame)
 
