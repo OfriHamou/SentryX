@@ -54,28 +54,34 @@ class YahboomObjectDetector(object):
             raise IOError("Failed to load object detector: {}".format(e))
     
     def _load_label_map(self):
-        """Load COCO label map from file."""
+        """Load TensorFlow COCO .pbtxt label map."""
         if not os.path.exists(self.label_path):
             raise IOError("Label map not found: {}".format(self.label_path))
-        
+
         try:
+            current_id = None
+            current_name = None
+
             with open(self.label_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith('#'):
-                        continue
-                    # Format: class_id,class_name
-                    parts = line.split(',', 1)
-                    if len(parts) == 2:
-                        try:
-                            class_id = int(parts[0])
-                            class_name = parts[1].strip()
-                            self.label_map[class_id] = class_name
-                        except ValueError:
-                            pass
+                for raw_line in f:
+                    line = raw_line.strip()
+
+                    if line.startswith("id:"):
+                        current_id = int(line.split(":", 1)[1].strip())
+
+                    elif line.startswith("display_name:"):
+                        current_name = line.split(":", 1)[1].strip().strip('"')
+
+                    elif line == "}":
+                        if current_id is not None and current_name:
+                            self.label_map[current_id] = current_name
+
+                        current_id = None
+                        current_name = None
+
         except Exception as e:
             raise IOError("Failed to load label map: {}".format(e))
-    
+
     def _load_graph(self):
         """Load and initialize TensorFlow graph and session."""
         if not os.path.exists(self.model_path):
@@ -90,8 +96,17 @@ class YahboomObjectDetector(object):
                     od_graph_def.ParseFromString(serialized_graph)
                     tf.import_graph_def(od_graph_def, name='')
             
-            # Create session in default config
-            self.session = tf.compat.v1.Session(graph=self.detection_graph)
+            # Create TensorFlow session with Jetson-friendly limits
+            config = tf.compat.v1.ConfigProto()
+            config.device_count['GPU'] = 0
+            config.gpu_options.allow_growth = True
+            config.intra_op_parallelism_threads = 1
+            config.inter_op_parallelism_threads = 1
+
+            self.session = tf.compat.v1.Session(
+                graph=self.detection_graph,
+                config=config
+            )
         except Exception as e:
             raise IOError("Failed to load TensorFlow model: {}".format(e))
     
@@ -120,8 +135,9 @@ class YahboomObjectDetector(object):
             return []
         
         try:
-            # Prepare input
-            image_np = frame.copy()
+            # Prepare input at a smaller resolution to reduce Jetson GPU memory usage.
+            # Detection boxes are normalized, so obstacle-position logic still works.
+            image_np = cv2.resize(frame, (300, 300))
             image_np_expanded = np.expand_dims(image_np, axis=0)
             
             # Get input/output tensors

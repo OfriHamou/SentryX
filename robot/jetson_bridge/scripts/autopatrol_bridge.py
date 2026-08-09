@@ -34,8 +34,8 @@ VIDEO_STREAM_URL = "http://127.0.0.1:5001/video_feed"
 WEB_BRIDGE_URL = "http://127.0.0.1:5000"
 
 # Movement constants (m/s, radians, seconds)
-FORWARD_SPEED = 0.35
-REVERSE_SPEED = -0.30
+FORWARD_SPEED = -0.35
+REVERSE_SPEED = 0.30
 TURN_ROTATION = 0.65
 REVERSE_SECONDS = 0.45
 TURN_SECONDS = 0.70
@@ -48,6 +48,7 @@ OBSTACLE_CENTER_MAX = 0.80
 OBSTACLE_YMAX_MIN = 0.50
 OBSTACLE_AREA_MIN = 0.08
 CONSECUTIVE_OBSTACLE_THRESHOLD = 2  # detections in a row
+CLEAR_PATH_REARM_THRESHOLD = 3  # clear detections before avoidance can trigger again
 
 # Timeouts
 FRAME_TIMEOUT_SECONDS = 1.0
@@ -260,9 +261,10 @@ def detect_obstacles(frame):
         for det in detections:
             if detector.is_forward_obstacle(det):
                 obstacles.append(det)
-                # Keep last detection for status
-                with detection_lock:
-                    last_detection = det
+                
+        # Keep status synchronized with the current frame
+        with detection_lock:
+            last_detection = obstacles[0] if obstacles else None
         
         return obstacles
     except Exception as e:
@@ -361,6 +363,8 @@ def patrol_loop():
     global last_action
     
     obstacle_counter = 0
+    avoidance_armed = True
+    clear_path_counter = 0
     
     while True:
         # Check if still active
@@ -385,26 +389,47 @@ def patrol_loop():
         obstacles = detect_obstacles(frame)
         
         if len(obstacles) > 0:
-            obstacle_counter += 1
+            clear_path_counter = 0
+
+            if avoidance_armed:
+                obstacle_counter += 1
+            else:
+                obstacle_counter = 0
         else:
             obstacle_counter = 0
+
+            if not avoidance_armed:
+                clear_path_counter += 1
+                if clear_path_counter >= CLEAR_PATH_REARM_THRESHOLD:
+                    avoidance_armed = True
+                    clear_path_counter = 0
         
-        # Decide action
-        if obstacle_counter >= CONSECUTIVE_OBSTACLE_THRESHOLD:
-            # Trigger avoidance
+        # Trigger one avoidance, then wait for a clear path before re-arming.
+        if avoidance_armed and obstacle_counter >= CONSECUTIVE_OBSTACLE_THRESHOLD:
             obstacle_counter = 0
+            avoidance_armed = False
+            clear_path_counter = 0
+
             perform_avoidance()
-            
-            # Resume forward after maneuver
+
             with active_lock:
                 if not active:
                     break
-        
-        # Move forward if no obstacle
-        if obstacle_counter == 0:
-            send_move_command(FORWARD_SPEED, 0.0)
+
+            continue
+
+        # If the previous obstacle is still visible, do not repeat avoidance
+        # and do not drive forward into it.
+        if not avoidance_armed and len(obstacles) > 0:
+            send_stop_command()
             with action_lock:
-                last_action = "forward"
+                last_action = "waiting_clear"
+            time.sleep(INFERENCE_INTERVAL_SECONDS)
+            continue
+
+        send_move_command(FORWARD_SPEED, 0.0)
+        with action_lock:
+            last_action = "forward"
         
         # Sleep for inference interval
         time.sleep(INFERENCE_INTERVAL_SECONDS)

@@ -89,13 +89,18 @@ def ensure_capture_thread():
 
 def generate_frames():
     ensure_capture_thread()
+    last_sent_frame_time = None
 
     while True:
         with frame_cond:
-            if latest_jpeg is None:
+            while (
+                latest_jpeg is None
+                or latest_frame_time == last_sent_frame_time
+            ):
                 frame_cond.wait(timeout=1.0)
-                continue
+
             jpg_bytes = latest_jpeg
+            last_sent_frame_time = latest_frame_time
 
         yield (
             b"--frame\r\n"

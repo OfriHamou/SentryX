@@ -23,7 +23,7 @@ mode_lock = threading.Lock()
 
 # --- Watchdog for autonomous mode ---
 last_autonomy_command_time = None
-autonomy_watchdog_timeout = 1.0  # seconds
+autonomy_watchdog_timeout = 5.0  # seconds
 
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
