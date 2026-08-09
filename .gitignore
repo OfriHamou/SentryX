@@ -17,5 +17,6 @@ frontend/dist/
 backend/package-lock.json
 backend/node_modules
 backend/dist
+backend/coverage/
 
 package-lock.json

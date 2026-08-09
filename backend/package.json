@@ -5,6 +5,8 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "test": "NODE_ENV=test jest --forceExit",
+    "test:unit": "NODE_ENV=test jest --runInBand",
+    "test:coverage": "NODE_ENV=test jest --coverage --runInBand",
     "migrate:sql": "node scripts/run-sql-migration.js migrations/2026-04-25-normalize-role-allowed-pages.sql",
     "migrate:refresh-token-sessions": "node scripts/run-sql-migration.js migrations/2026-04-25-create-refresh-token-sessions.sql",
     "migrate:registration-approval": "node scripts/run-sql-migration.js migrations/2026-06-18-add-user-status-and-invite-code.sql",
