@@ -274,20 +274,27 @@ def detect_obstacles(frame):
 def send_move_command(speed, rotation):
     """Send movement command to web_bridge."""
     global last_action
-    
-    url = "{}/api/autonomy/move".format(WEB_BRIDGE_URL)
-    response = http_request(url, method="POST", json_data={
-        "speed": speed,
-        "rotation": rotation
-    })
-    
+
+    # Serialize movement with /stop so no move command can be sent
+    # after Auto Patrol has been marked inactive.
+    with active_lock:
+        if not active:
+            return False
+
+        url = "{}/api/autonomy/move".format(WEB_BRIDGE_URL)
+        response = http_request(url, method="POST", json_data={
+            "speed": speed,
+            "rotation": rotation
+        })
+
     if response and response.get("ok"):
         with action_lock:
             last_action = "moving"
         return True
-    
+
     set_error("Movement command failed")
     return False
+
 
 def send_stop_command():
     """Send stop command to web_bridge."""
