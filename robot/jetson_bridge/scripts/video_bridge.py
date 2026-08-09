@@ -6,7 +6,9 @@ import time
 
 app = Flask(__name__)
 
-JPEG_QUALITY = 90
+VIDEO_TARGET_FPS = 15
+JPEG_QUALITY = 85
+FRAME_INTERVAL_SECONDS = 1.0 / float(VIDEO_TARGET_FPS)
 
 camera = None
 camera_lock = threading.Lock()
@@ -46,6 +48,7 @@ def get_camera():
 
 def capture_loop():
     global latest_jpeg, latest_frame_time
+    last_encode_time = 0.0
 
     while True:
         cap = get_camera()
@@ -55,6 +58,10 @@ def capture_loop():
             time.sleep(0.05)
             continue
 
+        now = time.time()
+        if (now - last_encode_time) < FRAME_INTERVAL_SECONDS:
+            continue
+
         ok, buffer = cv2.imencode(
             ".jpg",
             frame,
@@ -62,6 +69,7 @@ def capture_loop():
         )
         if not ok:
             continue
+        last_encode_time = now
 
         jpg_bytes = buffer.tobytes()
 
@@ -81,13 +89,18 @@ def ensure_capture_thread():
 
 def generate_frames():
     ensure_capture_thread()
+    last_sent_frame_time = None
 
     while True:
         with frame_cond:
-            if latest_jpeg is None:
+            while (
+                latest_jpeg is None
+                or latest_frame_time == last_sent_frame_time
+            ):
                 frame_cond.wait(timeout=1.0)
-                continue
+
             jpg_bytes = latest_jpeg
+            last_sent_frame_time = latest_frame_time
 
         yield (
             b"--frame\r\n"
