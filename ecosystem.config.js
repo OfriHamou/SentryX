@@ -50,6 +50,17 @@ module.exports = {
             }
         },
         {
+            name: 'landing-app',
+            script: 'bash',
+            args: '-c "npm install && npm run dev"',
+            cwd: './frontend/landing-app',
+            watch: false,
+            env: {
+                ...parseEnvFile('./frontend/landing-app/.env'),
+                NODE_ENV: 'development'
+            }
+        },
+        {
             name: 'periodics',
             script: 'bash',
             args: '-c "npm install && npm run dev"',
