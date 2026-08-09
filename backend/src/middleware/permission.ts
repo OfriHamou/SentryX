@@ -104,15 +104,15 @@ function roleAllows(permissionSet: Set<string>, resource: string, action?: strin
 
     const normalizedAction = action ? normalizePermission(action) : "";
 
-    const candidates = new Set<string>([
-        normalizedResource,
-        `/${normalizedResource}`
-    ]);
+    const candidates = new Set<string>();
 
     if (normalizedAction) {
         candidates.add(`${normalizedResource}:${normalizedAction}`);
         candidates.add(`${normalizedResource}.${normalizedAction}`);
         candidates.add(`${normalizedResource}/${normalizedAction}`);
+    } else {
+        candidates.add(normalizedResource);
+        candidates.add(`/${normalizedResource}`);
     }
 
     for (const candidate of candidates) {
@@ -137,7 +137,11 @@ export function hasAccess(resource: string, action?: string) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
         const auth = res.locals.auth as AuthIdentityPayload | undefined;
 
-        if (!auth?.roleId) {
+        if (
+            typeof auth?.roleId !== "number" ||
+            !Number.isFinite(auth.roleId) ||
+            auth.roleId <= 0
+        ) {
             res.status(401).json({ message: "Unauthenticated" });
             return;
         }
