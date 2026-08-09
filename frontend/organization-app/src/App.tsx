@@ -27,7 +27,7 @@ const AppRoutes: React.FC = () => {
 function App() {
     return (
         <OrganizationAuthProvider>
-            <Router>
+            <Router basename={import.meta.env.BASE_URL}>
                 <AppRoutes />
             </Router>
         </OrganizationAuthProvider>

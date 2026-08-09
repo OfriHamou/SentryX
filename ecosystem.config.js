@@ -61,6 +61,17 @@ module.exports = {
             }
         },
         {
+            name: 'organization-app',
+            script: 'bash',
+            args: '-c "npm install && npm run dev"',
+            cwd: './frontend/organization-app',
+            watch: false,
+            env: {
+                ...parseEnvFile('./frontend/organization-app/.env'),
+                NODE_ENV: 'development'
+            }
+        },
+        {
             name: 'periodics',
             script: 'bash',
             args: '-c "npm install && npm run dev"',

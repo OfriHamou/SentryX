@@ -28,7 +28,7 @@ api.interceptors.response.use(
                     return api(originalRequest);
                 } catch (refreshError) {
                     // Redirect to login
-                    window.location.href = '/login';
+                    window.location.href = import.meta.env.BASE_URL + 'login';
                     return Promise.reject(refreshError);
                 }
             }
