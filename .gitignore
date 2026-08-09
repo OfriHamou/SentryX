@@ -20,3 +20,11 @@ backend/dist
 backend/coverage/
 
 package-lock.json
+
+# Python / Jetson runtime
+.venv/
+__pycache__/
+*.pyc
+
+# Robot runtime data
+robot/jetson_bridge/data/
