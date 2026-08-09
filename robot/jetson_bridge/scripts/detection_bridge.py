@@ -16,6 +16,7 @@ app = Flask(__name__)
 
 EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
+FACE_DETECTION_INTERVAL_SECONDS = 0.35
 STREAM_URL = "http://127.0.0.1:5001/video_feed"
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:4000").rstrip("/")
 ROBOT_ID = os.environ.get("ROBOT_ID", "be0ca78d-eff9-422b-8e07-7fdb50835185")
@@ -232,6 +233,7 @@ def detection_loop():
     global latest_event
 
     cap = None
+    last_detection_run = 0.0
 
     while True:
         if cap is None or not cap.isOpened():
@@ -265,10 +267,17 @@ def detection_loop():
             time.sleep(0.1)
             continue
 
+        with state_lock:
+            latest_status["camera_opened"] = True
+
+        now = time.time()
+        if (now - last_detection_run) < FACE_DETECTION_INTERVAL_SECONDS:
+            continue
+        last_detection_run = now
+
         detections = detector.detect_faces(frame)
 
         with state_lock:
-            latest_status["camera_opened"] = True
             latest_status["faces_detected"] = len(detections)
             latest_status["detections"] = detections
 
@@ -282,8 +291,6 @@ def detection_loop():
                 with state_lock:
                     latest_event = event
                     latest_status["last_event_id"] = event["id"]
-
-        time.sleep(0.1)
 
 @app.route("/health", methods=["GET"])
 def health():

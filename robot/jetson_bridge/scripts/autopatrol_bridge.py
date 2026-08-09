@@ -39,7 +39,7 @@ REVERSE_SPEED = -0.30
 TURN_ROTATION = 0.65
 REVERSE_SECONDS = 0.45
 TURN_SECONDS = 0.70
-INFERENCE_INTERVAL_SECONDS = 0.25
+INFERENCE_INTERVAL_SECONDS = 0.35
 
 # Obstacle detection constants
 OBSTACLE_SCORE_THRESHOLD = 0.50
@@ -64,6 +64,10 @@ frame_lock = threading.Lock()
 active = False
 active_lock = threading.Lock()
 
+stream_enabled = False
+stream_enabled_lock = threading.Lock()
+stream_thread = None
+
 last_action = "idle"
 action_lock = threading.Lock()
 
@@ -78,6 +82,20 @@ error_lock = threading.Lock()
 
 model_loaded = False
 stream_connected = False
+
+def is_stream_enabled():
+    with stream_enabled_lock:
+        return stream_enabled
+
+def set_stream_enabled(enabled):
+    global stream_enabled, stream_connected, latest_frame, latest_frame_time
+    with stream_enabled_lock:
+        stream_enabled = enabled
+    if not enabled:
+        stream_connected = False
+        with frame_lock:
+            latest_frame = None
+            latest_frame_time = None
 
 def set_error(msg):
     global last_error
@@ -115,6 +133,10 @@ def read_mjpeg_stream():
     boundary = b'--frame'
     
     while True:
+        if not is_stream_enabled():
+            time.sleep(0.1)
+            continue
+
         try:
             response = urllib.request.urlopen(VIDEO_STREAM_URL, timeout=5)
             stream_connected = True
@@ -122,6 +144,14 @@ def read_mjpeg_stream():
             buffer = b''
             
             while True:
+                if not is_stream_enabled():
+                    stream_connected = False
+                    try:
+                        response.close()
+                    except Exception:
+                        pass
+                    break
+
                 chunk = response.read(4096)
                 if not chunk:
                     break
@@ -161,8 +191,24 @@ def read_mjpeg_stream():
         
         except Exception as e:
             stream_connected = False
-            set_error("Video stream error: {}".format(e))
+            if is_stream_enabled():
+                set_error("Video stream error: {}".format(e))
             time.sleep(1)
+
+def ensure_stream_thread():
+    global stream_thread
+    if stream_thread is None or not stream_thread.is_alive():
+        stream_thread = threading.Thread(target=read_mjpeg_stream, daemon=True)
+        stream_thread.start()
+
+def wait_for_stream_frame(timeout_seconds):
+    start = time.time()
+    while time.time() - start < timeout_seconds:
+        frame, _ = get_latest_frame()
+        if frame is not None:
+            return True
+        time.sleep(0.05)
+    return False
 
 def load_detector():
     """Load TensorFlow object detector from environment variables."""
@@ -312,6 +358,7 @@ def patrol_loop():
     """Main patrol loop: detect, decide, move."""
     global obstacle_counter
     global active
+    global last_action
     
     obstacle_counter = 0
     
@@ -327,6 +374,11 @@ def patrol_loop():
             set_error("No recent video frame")
             with active_lock:
                 active = False
+            send_stop_command()
+            http_request("{}/api/mode/manual".format(WEB_BRIDGE_URL), method="POST")
+            set_stream_enabled(False)
+            with action_lock:
+                last_action = "stopped"
             break
         
         # Run detection
@@ -400,6 +452,12 @@ def status():
 @app.route("/start", methods=["POST"])
 def start_patrol():
     global active, obstacle_counter, turn_direction, last_action
+    with active_lock:
+        if active:
+            return jsonify({
+                "ok": True,
+                "message": "Auto Patrol already active"
+            })
     
     # Check model
     if not model_loaded:
@@ -408,9 +466,11 @@ def start_patrol():
             "error": "Model failed to load"
         }), 400
     
-    # Check video stream
-    frame, _ = get_latest_frame()
-    if frame is None:
+    # Activate video stream processing only while Auto Patrol is active
+    set_stream_enabled(True)
+    ensure_stream_thread()
+    if not wait_for_stream_frame(2.0):
+        set_stream_enabled(False)
         return jsonify({
             "ok": False,
             "error": "No video stream available"
@@ -419,6 +479,7 @@ def start_patrol():
     # Switch web_bridge to auto mode
     mode_response = http_request("{}/api/mode/auto".format(WEB_BRIDGE_URL), method="POST")
     if not mode_response or not mode_response.get("ok"):
+        set_stream_enabled(False)
         return jsonify({
             "ok": False,
             "error": "Failed to switch to auto mode"
@@ -444,7 +505,7 @@ def start_patrol():
 
 @app.route("/stop", methods=["POST"])
 def stop_patrol():
-    global active, obstacle_counter, turn_direction, last_action
+    global active, obstacle_counter, turn_direction, last_action, last_detection
     
     # Mark inactive
     with active_lock:
@@ -452,6 +513,8 @@ def stop_patrol():
     
     obstacle_counter = 0
     turn_direction = -1.0
+    with detection_lock:
+        last_detection = None
     with action_lock:
         last_action = "stopped"
     
@@ -460,7 +523,8 @@ def stop_patrol():
     time.sleep(0.1)
     
     # Switch web_bridge back to manual mode
-    mode_response = http_request("{}/api/mode/manual".format(WEB_BRIDGE_URL), method="POST")
+    http_request("{}/api/mode/manual".format(WEB_BRIDGE_URL), method="POST")
+    set_stream_enabled(False)
     
     return jsonify({
         "ok": True,
@@ -468,9 +532,8 @@ def stop_patrol():
     })
 
 if __name__ == "__main__":
-    # Start video stream reader thread
-    threading.Thread(target=read_mjpeg_stream, daemon=True).start()
-    time.sleep(1)  # Wait for first frame
+    # Start reader thread in idle mode; it only reads/decodes when stream is enabled.
+    ensure_stream_thread()
     
     # Load detector
     if not load_detector():
