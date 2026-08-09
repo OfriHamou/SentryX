@@ -1,0 +1,19 @@
+[Unit]
+Description=SentryX Auto Patrol Bridge
+After=network.target web-bridge.service video-bridge.service
+Wants=network-online.target
+Requires=web-bridge.service video-bridge.service
+
+[Service]
+Type=simple
+User=jetson
+WorkingDirectory=/home/jetson/projects/SentryX/robot/jetson_bridge
+EnvironmentFile=/etc/sentryx/autopatrol-bridge.env
+ExecStart=/usr/bin/python3 scripts/autopatrol_bridge.py
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ import rospy
 from jetbotmini_msgs.srv import Motor
 from jetbotmini_msgs.msg import Battery
 import threading
+import time
 
 app = Flask(__name__)
 
@@ -15,6 +16,14 @@ MAX_OUT = 1.0      # keep within [-1,1] unless you discover higher works
 # --- Shared battery state ---
 latest_voltage = None
 battery_lock = threading.Lock()
+
+# --- Control mode state ---
+control_mode = "manual"  # "manual" or "auto"
+mode_lock = threading.Lock()
+
+# --- Watchdog for autonomous mode ---
+last_autonomy_command_time = None
+autonomy_watchdog_timeout = 1.0  # seconds
 
 def clamp(x, lo, hi):
     return max(lo, min(hi, x))
@@ -65,6 +74,19 @@ motor_srv = rospy.ServiceProxy("/Motor", Motor)
 
 @app.route("/api/move", methods=["POST"])
 def api_move():
+    global last_autonomy_command_time
+    
+    with mode_lock:
+        current_mode = control_mode
+    
+    # Reject manual movement during auto mode
+    if current_mode == "auto":
+        return jsonify({
+            "ok": False,
+            "error": "Manual control is disabled during Auto Patrol",
+            "mode": "auto"
+        }), 409
+    
     data = request.get_json(silent=True) or {}
 
     speed = float(data.get("speed", 0.0))       # [-1..1]
@@ -97,8 +119,15 @@ def api_move():
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    global control_mode
+    
     try:
         resp = motor_srv(rightspeed=0.0, leftspeed=0.0)
+        
+        # Reset mode to manual
+        with mode_lock:
+            control_mode = "manual"
+        
         return jsonify({"ok": True, "result": bool(resp.result)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -133,6 +162,153 @@ def health():
         "ok": True,
         "battery_data_received": has_battery_data
     })
+
+# --- Mode management endpoints ---
+
+@app.route("/api/mode", methods=["GET"])
+def api_get_mode():
+    with mode_lock:
+        current_mode = control_mode
+    
+    return jsonify({
+        "ok": True,
+        "mode": current_mode
+    })
+
+@app.route("/api/mode/manual", methods=["POST"])
+def api_mode_manual():
+    global control_mode
+    
+    try:
+        # Stop motors first
+        motor_srv(rightspeed=0.0, leftspeed=0.0)
+        
+        # Switch to manual mode
+        with mode_lock:
+            control_mode = "manual"
+        
+        return jsonify({
+            "ok": True,
+            "mode": "manual"
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/mode/auto", methods=["POST"])
+def api_mode_auto():
+    global control_mode
+    
+    try:
+        # Stop motors first
+        motor_srv(rightspeed=0.0, leftspeed=0.0)
+        
+        # Switch to auto mode
+        with mode_lock:
+            control_mode = "auto"
+        
+        return jsonify({
+            "ok": True,
+            "mode": "auto"
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# --- Autonomous movement endpoints (internal use only) ---
+
+@app.route("/api/autonomy/move", methods=["POST"])
+def api_autonomy_move():
+    global last_autonomy_command_time
+    
+    with mode_lock:
+        current_mode = control_mode
+    
+    # Only allow autonomous movement when in auto mode
+    if current_mode != "auto":
+        return jsonify({
+            "ok": False,
+            "error": "Autonomous movement only allowed in auto mode",
+            "mode": current_mode
+        }), 409
+    
+    data = request.get_json(silent=True) or {}
+
+    speed = float(data.get("speed", 0.0))       # [-1..1]
+    rotation = float(data.get("rotation", 0.0)) # [-1..1]
+
+    speed = clamp(speed, -1.0, 1.0)
+    rotation = clamp(rotation, -1.0, 1.0)
+
+    # Differential drive
+    left = (speed - rotation) * SCALE
+    right = (speed + rotation) * SCALE
+
+    left = clamp(left, -MAX_OUT, MAX_OUT)
+    right = clamp(right, -MAX_OUT, MAX_OUT)
+
+    # Apply deadzone so the robot actually moves
+    left = apply_deadzone(left)
+    right = apply_deadzone(right)
+
+    try:
+        resp = motor_srv(rightspeed=right, leftspeed=left)
+        
+        # Update watchdog timer
+        last_autonomy_command_time = time.time()
+        
+        return jsonify({
+            "ok": True,
+            "inputs": {"speed": speed, "rotation": rotation},
+            "outputs": {"rightspeed": right, "leftspeed": left},
+            "result": bool(resp.result)
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/autonomy/stop", methods=["POST"])
+def api_autonomy_stop():
+    global last_autonomy_command_time
+    
+    try:
+        resp = motor_srv(rightspeed=0.0, leftspeed=0.0)
+        
+        # Update watchdog timer
+        last_autonomy_command_time = time.time()
+        
+        return jsonify({"ok": True, "result": bool(resp.result)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# --- Watchdog background thread ---
+
+def watchdog_loop():
+    """
+    Watchdog timer: if in auto mode and no autonomy command for ~1 second,
+    stop the motors and switch back to manual mode.
+    """
+    while True:
+        time.sleep(0.1)  # Check frequently
+        
+        with mode_lock:
+            current_mode = control_mode
+        
+        if current_mode != "auto":
+            continue
+        
+        if last_autonomy_command_time is None:
+            continue
+        
+        elapsed = time.time() - last_autonomy_command_time
+        if elapsed > autonomy_watchdog_timeout:
+            # Watchdog timeout: stop and reset to manual
+            try:
+                motor_srv(rightspeed=0.0, leftspeed=0.0)
+                with mode_lock:
+                    control_mode = "manual"
+            except Exception:
+                pass
+
+watchdog_thread = threading.Thread(target=watchdog_loop, daemon=True)
+watchdog_thread.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

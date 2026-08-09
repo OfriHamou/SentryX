@@ -18,6 +18,7 @@ function requireEnvVariable(name: string): string {
 const JETSON_BASE_URL = requireEnvVariable("JETSON_BASE_URL");
 const JETSON_VIDEO_URL = requireEnvVariable("JETSON_VIDEO_URL");
 const JETSON_DETECTION_URL = requireEnvVariable("JETSON_DETECTION_URL");
+const JETSON_AUTOPATROL_URL = process.env.JETSON_AUTOPATROL_URL || "http://sentryx-jetson:5003";
 
 function getRequestId(req: Request): string | undefined {
     const header = req.headers["x-request-id"];
@@ -333,5 +334,51 @@ export class RobotController {
             console.error("Error updating robot:", error);
             return res.status(500).json({ ok: false, error: "Failed to update robot" });
         }
+    }
+
+    // --- Auto Patrol endpoints ---
+
+    static async getAutoPatrolHealth(req: Request, res: Response) {
+        return forwardJetsonJson(req, res, `${JETSON_AUTOPATROL_URL}/health`, undefined, {
+            endpointName: "autopatrol/health"
+        });
+    }
+
+    static async getAutoPatrolStatus(req: Request, res: Response) {
+        return forwardJetsonJson(req, res, `${JETSON_AUTOPATROL_URL}/status`, undefined, {
+            endpointName: "autopatrol/status"
+        });
+    }
+
+    static async startAutoPatrol(req: Request, res: Response) {
+        logger.info("Auto Patrol command sent", buildRobotMeta(req, res, {
+            category: "ROBOT",
+            action: "COMMAND_SENT",
+            status: "SUCCESS",
+            metadata: {
+                commandName: "startAutoPatrol"
+            }
+        }));
+
+        return forwardJetsonJson(req, res, `${JETSON_AUTOPATROL_URL}/start`, { method: "POST" }, {
+            commandName: "startAutoPatrol",
+            endpointName: "autopatrol/start"
+        });
+    }
+
+    static async stopAutoPatrol(req: Request, res: Response) {
+        logger.info("Auto Patrol command sent", buildRobotMeta(req, res, {
+            category: "ROBOT",
+            action: "COMMAND_SENT",
+            status: "SUCCESS",
+            metadata: {
+                commandName: "stopAutoPatrol"
+            }
+        }));
+
+        return forwardJetsonJson(req, res, `${JETSON_AUTOPATROL_URL}/stop`, { method: "POST" }, {
+            commandName: "stopAutoPatrol",
+            endpointName: "autopatrol/stop"
+        });
     }
 }
