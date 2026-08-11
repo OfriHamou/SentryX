@@ -1,5 +1,4 @@
-import { Box, Typography, Button, Stack } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import { Box, Typography } from '@mui/material';
 import RobotConfig from '../components/settings/RobotConfig';
 import PatrolSchedule from '../components/settings/PatrolSchedule';
 import NotificationsSettings from '../components/settings/NotificationsSettings';
@@ -28,12 +27,6 @@ export default function Settings() {
             {canReadGeneralSettings && <PatrolSchedule canWrite={canWriteSettings} />}
             {canReadGeneralSettings && <NotificationsSettings canWrite={canWriteSettings} />}
             {canReadFaces && <AuthorizedFaces canWrite={canWriteFaces} />}
-            {/* TODO: persist to backend once a settings endpoint exists */}
-            <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-                <Button variant="contained" startIcon={<SaveIcon />} disabled sx={{ textTransform: 'none', borderRadius: 2, px: 4, py: 1.2 }}>
-                    Save Settings
-                </Button>
-            </Stack>
         </Box>
     );
 }

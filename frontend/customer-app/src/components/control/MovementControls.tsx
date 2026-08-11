@@ -9,9 +9,12 @@ import type { MoveInput } from '../../types/robot';
 
 interface MovementControlsProps {
     canWrite: boolean;
+    isAutoPatrolActive: boolean;
 }
 
-export default function MovementControls({ canWrite }: MovementControlsProps) {
+export default function MovementControls({ canWrite, isAutoPatrolActive }: MovementControlsProps) {
+    const isLocked = !canWrite || isAutoPatrolActive;
+
     const { move, stop } = useRobotMove();
     const [speed, setSpeed] = useState(50);
     const videoRef = useRef<HTMLDivElement>(null);
@@ -27,7 +30,13 @@ export default function MovementControls({ canWrite }: MovementControlsProps) {
     return (
         <Paper elevation={0} sx={{ p: 3, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
             <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>Movement Controls</Typography>
-            {!canWrite && (
+            {isAutoPatrolActive && (
+                <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
+                    Auto Patrol is driving. Stop it to take manual control.
+                </Alert>
+            )}
+
+            {!isAutoPatrolActive && !canWrite && (
                 <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
                     Read-only control access
                 </Alert>
@@ -60,7 +69,9 @@ export default function MovementControls({ canWrite }: MovementControlsProps) {
                     </Box>
 
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Directional Control</Typography>
-                    {canWrite && <JoystickControl size={150} onMove={handleMove} onStop={stop} />}
+                    <Box sx={{ opacity: isLocked ? 0.4 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}>
+                        <JoystickControl size={150} onMove={handleMove} onStop={stop} />
+                    </Box>
                 </Grid>
 
                 {/* Right: speed + go-to-location + tips */}
@@ -70,10 +81,10 @@ export default function MovementControls({ canWrite }: MovementControlsProps) {
                             <Typography variant="body2" color="text.secondary">Speed</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 700 }}>{speed}%</Typography>
                         </Stack>
-                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={!canWrite} />
-                        {!canWrite && (
+                        <Slider value={speed} onChange={(_, v) => setSpeed(v as number)} min={0} max={100} disabled={isLocked} />
+                        {isAutoPatrolActive && (
                             <Typography variant="caption" color="text.secondary">
-                                Speed controls disabled during Auto Patrol
+                                Speed is controlled by Auto Patrol
                             </Typography>
                         )}
                     </Box>
