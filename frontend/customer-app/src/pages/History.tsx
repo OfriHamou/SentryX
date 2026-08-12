@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Box, Paper, Typography, Grid, Stack, Button } from '@mui/material';
 import { EventNote as TotalIcon, GppGood as PatrolIcon, ReportProblem as IncidentIcon, Videocam as VideoIcon } from '@mui/icons-material';
 import HistoryEventCard from '../components/history/HistoryEventCard';
@@ -17,10 +17,17 @@ export default function History() {
     const { data: events } = useEventHistory();
     const { data: robot } = useRobot();
     const [range, setRange] = useState<Range>('week');
+    // Captured on range change, not during render, so the window stays stable while polling.
+    const [cutoff, setCutoff] = useState(() => Date.now() - RANGE_MS['week']);
+
+    const changeRange = useCallback((next: Range) => {
+        setRange(next);
+        setCutoff(Date.now() - RANGE_MS[next]);
+    }, []);
 
     const location = robot?.location ?? '—';
     const allEvents = events ?? [];
-    const visible = allEvents.filter((e) => new Date(e.timestamp).getTime() >= Date.now() - RANGE_MS[range]);
+    const visible = allEvents.filter((e) => new Date(e.timestamp).getTime() >= cutoff);
     const incidents = visible.filter((e) => e.is_alert).length;
 
     const tabs: { key: Range; label: string }[] = [
@@ -35,7 +42,7 @@ export default function History() {
                 <Typography variant="h5" sx={{ fontWeight: 800, mb: 2 }}>Event History</Typography>
                 <Stack direction="row" spacing={1.5}>
                     {tabs.map((tab) => (
-                        <Button key={tab.key} onClick={() => setRange(tab.key)} disableElevation 
+                        <Button key={tab.key} onClick={() => changeRange(tab.key)} disableElevation
                             sx={{ textTransform: 'none', borderRadius: 2, px: 2.5, fontWeight: 700, 
                                   bgcolor: range === tab.key ? '#fff' : 'transparent',
                                   color: range === tab.key ? 'text.primary' : 'text.secondary',

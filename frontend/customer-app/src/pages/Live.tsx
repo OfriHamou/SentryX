@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';      
+import { useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom'; 
 import { Box, Paper, Typography } from '@mui/material';
 import VideoPlayer from '../components/live/video/VideoPlayer';
@@ -8,6 +8,7 @@ import RecentActivityCard from '../components/live/activity/RecentActivityCard';
 import { useBattery } from '../hooks/robot/useBattery';
 import { useRobot } from '../hooks/robot/useRobot';
 import { useDetectionStatus } from '../hooks/robot/useDetectionStatus';
+import { useAutoPatrolStatus } from '../hooks/robot/useAutoPatrolStatus';
 import { useEvents } from '../hooks/robot/useEvents';
 import { useFullscreen } from '../hooks/useFullscreen';
 import FullscreenControls from '../components/live/fullscreen/FullscreenControls';
@@ -18,8 +19,8 @@ export default function Live() {
     const { data: battery } = useBattery();
     const { data: robot } = useRobot();
     const { data: detection } = useDetectionStatus();
+    const { data: patrolStatus } = useAutoPatrolStatus();
     const { data: events, loading: eventsLoading, error: eventsError } = useEvents();
-    const [volume, setVolume] = useState(50);
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const { isFullscreen, enterFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
     const location = useLocation();
@@ -32,6 +33,7 @@ export default function Live() {
     }, []);
 
     const faceStatus = detection?.camera_opened ? 'active' : 'inactive';
+    const obstacleStatus = patrolStatus?.model_loaded ? 'active' : 'unavailable';
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -98,14 +100,7 @@ export default function Live() {
                 </Box>
 
 
-                <ActionPanel
-                        onTalkToggle={(talking) => console.log('talk toggle', talking)}
-                        onAlarm={() => console.log('alarm triggered')}
-                        onCallEmergency={() => console.log('emergency call triggered')}
-                        volume={volume}
-                        onVolumeChange={setVolume}
-                        canControl={canWriteControl}
-                />
+                <ActionPanel canControl={canWriteControl} />
             </Paper>
 
             <Box
@@ -115,7 +110,10 @@ export default function Live() {
                     gap: 3,
                 }}
             >
-                <DetectionStatusCard faceRecognitionStatus={faceStatus} />
+                <DetectionStatusCard
+                    faceRecognitionStatus={faceStatus}
+                    obstacleDetectionStatus={obstacleStatus}
+                />
                 <RecentActivityCard
                       events={events ?? []}
                       loading={eventsLoading}

@@ -167,7 +167,7 @@ export default function BellNotifications() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    void (async () => { await refresh(); })();
     const intervalId = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(intervalId);
   }, [refresh]);

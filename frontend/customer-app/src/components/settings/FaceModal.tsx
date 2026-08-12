@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Box, TextField, Button, IconButton, Typography, Stack } from '@mui/material';
 import { Close as CloseIcon, Save as SaveIcon, AddPhotoAlternate as AddPhotoIcon } from '@mui/icons-material';
 import { updateFace, addFaceImages, deleteFaceImage, faceImageUrl, type AuthorizedFace } from '../../api/faces';
@@ -10,8 +10,6 @@ export default function FaceModal({ face, open, onClose, onChanged, canWrite }: 
     const [role, setRole] = useState(face.role ?? '');
     const [images, setImages] = useState<string[]>(face.images);
     const [busy, setBusy] = useState(false);
-
-    useEffect(() => { setName(face.name); setRole(face.role ?? ''); setImages(face.images); }, [face]);
 
     const handleSave = async () => {
         setBusy(true);

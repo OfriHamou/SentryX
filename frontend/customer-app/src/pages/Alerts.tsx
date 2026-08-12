@@ -1,25 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-    Alert as MuiAlert,
-    Box,
-    Button,
-    Chip,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Divider,
-    FormControl,
-    MenuItem,
-    Paper,
-    Select,
-    Stack,
-    TextField,
-    Typography,
-} from '@mui/material';
+import { Alert as MuiAlert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, MenuItem, Paper, Select, Stack, TextField, Typography } from '@mui/material';
 import AlertCard from '../components/alerts/AlertCard';
+import AiInsightPanel from '../components/alerts/AiInsightPanel';
 import { getAlert, getAlerts, updateAlertStatus } from '../api/alerts';
 import { eventDbImageUrl } from '../api/robot';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
@@ -453,24 +436,11 @@ export default function Alerts() {
                                 )}
                             </Box>
 
-                            {selectedAlert.event.aiMetadata != null && (
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ mb: 1 }}>AI metadata</Typography>
-                                    <Box component="pre" sx={{
-                                        m: 0,
-                                        p: 2,
-                                        overflow: 'auto',
-                                        maxHeight: 260,
-                                        borderRadius: 2,
-                                        bgcolor: 'grey.100',
-                                        fontSize: 12,
-                                        whiteSpace: 'pre-wrap',
-                                        overflowWrap: 'anywhere',
-                                    }}>
-                                        {JSON.stringify(selectedAlert.event.aiMetadata, null, 2)}
-                                    </Box>
-                                </Box>
-                            )}
+                            <Divider />
+                            <AiInsightPanel
+                                aiMetadata={selectedAlert.event.aiMetadata}
+                                eventStatus={selectedAlert.event.status}
+                            />
                         </Stack>
                     )}
                 </DialogContent>

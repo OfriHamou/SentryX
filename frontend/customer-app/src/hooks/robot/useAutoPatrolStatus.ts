@@ -24,17 +24,24 @@ export function useAutoPatrolStatus() {
         let intervalId: number | null = null;
 
         const fetch = async () => {
+            if (document.hidden) {
+                return;
+            }
+
             try {
                 const response = await getAutoPatrolStatus();
                 if (isMounted) {
                     setData(response);
                     setError(null);
                 }
-            } catch (err) {
+            }
+            catch (err) {
                 if (isMounted) {
+                    setData(null);
                     setError((err as Error).message);
-                }
-            } finally {
+            }
+            } 
+            finally {
                 if (isMounted) {
                     setLoading(false);
                 }

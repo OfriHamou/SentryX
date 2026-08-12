@@ -20,6 +20,16 @@ export default function MediaGallery() {
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
 
+    // Captured on range change, not during render, so the window stays stable while polling.
+    const [cutoff, setCutoff] = useState(() => Date.now() - RANGE_MS['month']);
+
+    const changeTimeRange = (next: TimeRange) => {
+        setTimeRange(next);
+        if (next !== 'custom') {
+            setCutoff(Date.now() - RANGE_MS[next]);
+        }
+    };
+
     const inTimeRange = (ts: string) => {
         const t = new Date(ts).getTime();
         if (timeRange === 'custom') {
@@ -27,7 +37,7 @@ export default function MediaGallery() {
             const to = customTo ? new Date(customTo).getTime() + DAY_MS : Infinity;
             return t >= from && t <= to;
         }
-        return t >= Date.now() - RANGE_MS[timeRange];
+        return t >= cutoff;
     };
 
     const withImages = (events ?? []).filter((e) => e.image_filename && inTimeRange(e.timestamp));
@@ -38,7 +48,7 @@ export default function MediaGallery() {
                 sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' }, mb: 3 }}>
                 <Typography variant="h5" sx={{ fontWeight: 800 }}>Media Gallery</Typography>
                 <FormControl size="small" sx={{ minWidth: 170 }}>
-                    <Select value={timeRange} onChange={(e) => setTimeRange(e.target.value as TimeRange)}
+                    <Select value={timeRange} onChange={(e) => changeTimeRange(e.target.value as TimeRange)}
                         sx={{ bgcolor: '#fff', borderRadius: 2 }}>
                         <MenuItem value="24h">Last 24 hours</MenuItem>
                         <MenuItem value="week">Last week</MenuItem>

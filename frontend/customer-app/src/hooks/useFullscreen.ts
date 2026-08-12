@@ -29,7 +29,13 @@ export function useFullscreen(ref: RefObject<HTMLElement | null>) {
         }
     };
 
-    const toggleFullscreen = () => { isFullscreen ? exitFullscreen() : enterFullscreen(); };
+    const toggleFullscreen = () => {
+        if (isFullscreen) {
+            void exitFullscreen();
+        } else {
+            void enterFullscreen();
+        }
+    };
 
     return { isFullscreen, enterFullscreen, exitFullscreen, toggleFullscreen };
 }

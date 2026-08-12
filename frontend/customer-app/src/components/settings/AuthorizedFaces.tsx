@@ -20,7 +20,10 @@ export default function AuthorizedFaces({ canWrite }: AuthorizedFacesProps) {
     const load = async () => {
         try { setFaces(await getFaces()); } catch (e) { console.error('load faces', e); }
     };
-    useEffect(() => { load(); }, []);
+
+    useEffect(() => {
+        void (async () => { await load(); })();
+    }, []);
 
     const handleAdd = async () => {
         if (!name.trim()) return;
@@ -84,7 +87,7 @@ export default function AuthorizedFaces({ canWrite }: AuthorizedFacesProps) {
                 </Button>
             </Stack>
             )}
-            {selected && <FaceModal face={selected} open onClose={() => setSelected(null)} onChanged={load} canWrite={canWrite} />}
+            {selected && <FaceModal key={selected.id} face={selected} open onClose={() => setSelected(null)} onChanged={load} canWrite={canWrite} />}
         </Paper>
     );
 }

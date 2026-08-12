@@ -1,18 +1,22 @@
 import { Paper, Typography } from '@mui/material';
 import {
     Face as FaceIcon,
+    Sensors as ObstacleIcon,
     Cloud as SmokeIcon,
     LocalFireDepartment as FireIcon,
-    DirectionsRun as MotionIcon,
 } from '@mui/icons-material';
 import DetectorRow from './DetectorRow';
 import type { DetectorStatus } from './StatusPill';
 
 interface DetectionStatusCardProps {
     faceRecognitionStatus: DetectorStatus;
+    obstacleDetectionStatus: DetectorStatus;
 }
 
-export default function DetectionStatusCard({ faceRecognitionStatus }: DetectionStatusCardProps) {
+export default function DetectionStatusCard({
+    faceRecognitionStatus,
+    obstacleDetectionStatus,
+}: DetectionStatusCardProps) {
     return (
         <Paper
             elevation={0}
@@ -28,9 +32,9 @@ export default function DetectionStatusCard({ faceRecognitionStatus }: Detection
             </Typography>
 
             <DetectorRow name="Face Recognition" icon={<FaceIcon />} status={faceRecognitionStatus} />
-            <DetectorRow name="Smoke Detection" icon={<SmokeIcon />} status="unavailable" />
-            <DetectorRow name="Fire Detection" icon={<FireIcon />} status="unavailable" />
-            <DetectorRow name="Motion Detection" icon={<MotionIcon />} status="unavailable" />
+            <DetectorRow name="Obstacle Detection" icon={<ObstacleIcon />} status={obstacleDetectionStatus} />
+            <DetectorRow name="Smoke Detection" icon={<SmokeIcon />} status="comingSoon" />
+            <DetectorRow name="Fire Detection" icon={<FireIcon />} status="comingSoon" />
         </Paper>
     );
 }

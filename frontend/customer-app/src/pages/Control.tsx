@@ -20,7 +20,7 @@ export default function Control() {
     const { user } = useCustomerAuth();
     const { data: robot } = useRobot();
     const { data: battery } = useBattery();
-    const { data: autoPatrolStatus } = useAutoPatrolStatus();
+    const { data: autoPatrolStatus, error: statusError } = useAutoPatrolStatus();
     const canWriteControl = hasCustomerPermission(user?.allowedPages, 'control', 'write');
 
     const robotName = robot?.name ?? '—';
@@ -57,8 +57,12 @@ export default function Control() {
             )}
 
             <Grid container spacing={3}>
-                <Grid size={{ xs: 12, md: 8 }}><MovementControls canWrite={canWriteControl && !isAutoPatrolActive} /></Grid>
-                <Grid size={{ xs: 12, md: 4 }}><QuickActions /></Grid>
+                <Grid size={{ xs: 12, md: 8 }}>
+                    <MovementControls canWrite={canWriteControl} isAutoPatrolActive={isAutoPatrolActive} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 4 }}>
+                    <QuickActions autoPatrolStatus={autoPatrolStatus} statusError={statusError} />
+                </Grid>
             </Grid>
         </Box>
     );

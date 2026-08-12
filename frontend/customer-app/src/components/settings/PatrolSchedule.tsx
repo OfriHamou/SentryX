@@ -19,7 +19,7 @@ export default function PatrolSchedule({ canWrite }: PatrolScheduleProps) {
                 <ScheduleIcon sx={{ color: 'primary.main' }} />
                 <Typography variant="h6" sx={{ fontWeight: 700 }}>Patrol Schedule</Typography>
             </Stack>
-            <Typography variant="caption" color="text.disabled" sx={{ mb: 2, display: 'block' }}>Coming soon — needs patrol engine</Typography>
+            <Typography variant="caption" color="text.disabled" sx={{ mb: 2, display: 'block' }}>Coming soon — needs a scheduler</Typography>
             <Stack spacing={1}>
                 {SCHEDULES.map((s) => (
                     <Box key={s.label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid', borderColor: 'grey.200', borderRadius: 2, p: 1.5 }}>

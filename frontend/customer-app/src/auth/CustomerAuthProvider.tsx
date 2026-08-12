@@ -100,7 +100,7 @@ export const CustomerAuthProvider = ({ children }: { children: React.ReactNode }
   }, [clearAuthState]);
 
   useEffect(() => {
-    validateSession();
+    void (async () => { await validateSession(); })();
   }, [validateSession]);
 
   useEffect(() => {
