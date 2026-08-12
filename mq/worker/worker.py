@@ -120,6 +120,8 @@ def analyze_frame_remotely(image_path: str) -> Dict[str, Any]:
                     type=types.Type.OBJECT,
                     properties={
                         "people_count": types.Schema(type=types.Type.INTEGER),
+                        "overall_risk_level": types.Schema(type=types.Type.INTEGER,
+                                                            description="Overall risk assessment based on each individual\'s 'risk_level'. range 0-100"),
                         "individuals": types.Schema(
                             type=types.Type.ARRAY,
                             items=types.Schema(
