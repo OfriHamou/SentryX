@@ -139,6 +139,8 @@ def analyze_frame_remotely(image_path: str) -> Dict[str, Any]:
                                     "clothing_upper_color": types.Schema(type=types.Type.STRING),
                                     "facial_expression": types.Schema(type=types.Type.STRING),
                                     "posture_state": types.Schema(type=types.Type.STRING),
+                                    "risk_level": types.Schema(type=types.Type.STRING,
+                                                                          description="Overall risk assessment based on observed behaviors, posture, and compliance with safety protocols. range 0-100"),
                                 },
                                 required=[
                                     "apparent_gender",
@@ -182,18 +184,16 @@ def handle_motion_detected(image_path: str, metadata: dict) -> Dict[str, Any]:
     return analyze_frame_remotely(image_path=image_path)
 
 
-def handle_wet_floor_check(image_path: str, metadata: dict) -> Dict[str, Any]:
-    time.sleep(1)
-    return {"status": "checked", "hazard_detected": False, "type": "wet_floor"}
+def handle_wet_floor_check(image_path: str, metadata: dict) -> Dict[str, Any]: ...
 
 
-def handle_zone_compliance(image_path: str, metadata: dict) -> Dict[str, Any]:
-    time.sleep(1)
-    return {"status": "checked", "unauthorized_person_found": True}
+def handle_zone_compliance(image_path: str, metadata: dict) -> Dict[str, Any]: ...
 
 
 EVENT_ROUTES = {
     "motion_detected": handle_motion_detected,
+    "face_recognized": handle_motion_detected,
+    "face_detected_unknown": handle_motion_detected,
     "wet_floor_check": handle_wet_floor_check,
     "zone_compliance": handle_zone_compliance
 }
