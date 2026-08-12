@@ -139,7 +139,7 @@ def analyze_frame_remotely(image_path: str) -> Dict[str, Any]:
                                     "clothing_upper_color": types.Schema(type=types.Type.STRING),
                                     "facial_expression": types.Schema(type=types.Type.STRING),
                                     "posture_state": types.Schema(type=types.Type.STRING),
-                                    "risk_level": types.Schema(type=types.Type.STRING,
+                                    "risk_level": types.Schema(type=types.Type.INTEGER,
                                                                           description="Overall risk assessment based on observed behaviors, posture, and compliance with safety protocols. range 0-100"),
                                 },
                                 required=[
