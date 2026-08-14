@@ -1,27 +1,8 @@
 import { useState } from 'react';
-import {
-    Box,
-    Paper,
-    Typography,
-    Grid,
-    Dialog,
-    Chip,
-    Stack,
-    Select,
-    MenuItem,
-    TextField,
-    FormControl,
-    Button,
-    IconButton,
-} from '@mui/material';
+import { Box, Paper, Typography, Grid, Dialog, Chip, Stack, Select, MenuItem, TextField, FormControl, Button, IconButton, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-
 import { useEventHistory } from '../hooks/robot/useEventHistory';
-import {
-    eventDbImageUrl,
-    deleteEvent,
-    deleteAllEvents,
-} from '../api/robot';
+import { eventDbImageUrl, deleteEvent, deleteAllEvents, deleteEventImage } from '../api/robot';
 import { getEventDisplay } from '../components/live/activity/eventRegistry';
 import type { RobotEvent } from '../types/robot';
 
@@ -43,6 +24,7 @@ export default function MediaGallery() {
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
     // Captured on range change, not during render,
     // so the window stays stable while polling.
@@ -80,17 +62,10 @@ export default function MediaGallery() {
         (e) => e.image_filename && inTimeRange(e.timestamp)
     );
 
-    const handleDeleteEvent = async (eventId: string) => {
-        const confirmed = window.confirm(
-            'Delete this event permanently? This cannot be undone.'
-        );
-
-        if (!confirmed) return;
-
+    const runDelete = async (action: () => Promise<unknown>, eventId: string) => {
         try {
             setDeleting(true);
-
-            await deleteEvent(eventId);
+            await action();
 
             if (selected?.id === eventId) {
                 setSelected(null);
@@ -98,10 +73,11 @@ export default function MediaGallery() {
 
             await refresh();
         } catch (error) {
-            console.error('Failed to delete event:', error);
-            window.alert('Failed to delete event.');
+            console.error('Failed to delete:', error);
+            window.alert('Delete failed.');
         } finally {
             setDeleting(false);
+            setPendingDelete(null);
         }
     };
 
@@ -270,10 +246,7 @@ export default function MediaGallery() {
                                         disabled={deleting}
                                         onClick={(event) => {
                                             event.stopPropagation();
-
-                                            void handleDeleteEvent(
-                                                e.id
-                                            );
+                                            setPendingDelete(e.id);
                                         }}
                                         sx={{
                                             position: 'absolute',
@@ -394,17 +367,41 @@ export default function MediaGallery() {
                                 size="small"
                                 startIcon={<DeleteIcon />}
                                 disabled={deleting}
-                                onClick={() =>
-                                    void handleDeleteEvent(
-                                        selected.id
-                                    )
-                                }
+                                onClick={() => setPendingDelete(selected.id)}
                             >
                                 Delete
                             </Button>
                         </Stack>
                     </Box>
                 )}
+            </Dialog>
+            
+            <Dialog open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)}>
+                <DialogTitle>Delete this frame?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        You can remove just the image and keep the event, so it still counts
+                        in history and statistics — or remove both.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPendingDelete(null)} disabled={deleting}>
+                        Cancel
+                    </Button>
+                    <Button
+                        disabled={deleting}
+                        onClick={() => void runDelete(() => deleteEventImage(pendingDelete!), pendingDelete!)}
+                    >
+                        Image only
+                    </Button>
+                    <Button
+                        color="error"
+                        disabled={deleting}
+                        onClick={() => void runDelete(() => deleteEvent(pendingDelete!), pendingDelete!)}
+                    >
+                        Image and event
+                    </Button>
+                </DialogActions>
             </Dialog>
         </Box>
     );

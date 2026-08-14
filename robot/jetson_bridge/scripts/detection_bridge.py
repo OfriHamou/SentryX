@@ -16,6 +16,7 @@ app = Flask(__name__)
 
 EVENTS_DIR = "/home/jetson/projects/SentryX/robot/jetson_bridge/data/events"
 COOLDOWN_SECONDS = 10
+AI_REANALYZE_AFTER_SECONDS = int(os.environ.get("AI_REANALYZE_AFTER", 600))
 FACE_DETECTION_INTERVAL_SECONDS = 0.35
 STREAM_URL = "http://127.0.0.1:5001/video_feed"
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:4000").rstrip("/")
@@ -38,7 +39,33 @@ latest_status = {
 
 latest_event = None
 last_event_ts = 0
+last_seen_by_identity = {}
 state_lock = threading.Lock()
+
+def needs_ai_analysis(detections):
+    """True when at least one person in frame has not been analyzed recently.
+
+    A known face is keyed by name so the same person keeps one entry across
+    visits. An unknown face has no name, so its track is the only identity we
+    have — and a track that breaks and reopens means they left and came back.
+    """
+    now = time.time()
+    needed = False
+
+    for det in detections:
+        if det.get("is_known"):
+            identity = "name:{}".format(det.get("name"))
+        else:
+            identity = "track:{}".format(det.get("track_id"))
+
+        last_seen = last_seen_by_identity.get(identity, 0)
+
+        if now - last_seen > AI_REANALYZE_AFTER_SECONDS:
+            needed = True
+
+        last_seen_by_identity[identity] = now
+
+    return needed
 
 def build_annotated_frame(frame, detections):
     ts = datetime.now(timezone.utc)
@@ -70,6 +97,7 @@ def build_annotated_frame(frame, detections):
     metadata = {
         "detections": detections,
         "is_alert": not any_known,
+        "needs_ai": needs_ai_analysis(detections),
         "source": "SentryX_Smart_Vision",
         "reported_at": ts.isoformat()
     }

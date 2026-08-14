@@ -90,6 +90,11 @@ export const deleteEvent = async (eventId: string) => {
     return response.data;
 };
 
+export const deleteEventImage = async (eventId: string) => {
+    const response = await customerApi.delete(`/events/${encodeURIComponent(eventId)}/image`);
+    return response.data;
+};
+
 export const deleteAllEvents = async () => {
     const response = await customerApi.delete('/events');
     return response.data;
