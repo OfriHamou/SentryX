@@ -26,8 +26,8 @@ export default function JoystickControl({
                 stickColor={stickColor}
                 move={(event) => {
                     onMove({ 
-                        speed: event.y ?? 0, // Y>0 is forward, Y<0 is backward
-                        rotation: event.x ?? 0, // X>0 is right, X<0 is left
+                        speed: -(event.y ?? 0), // Y>0 is forward, Y<0 is backward
+                        rotation: -(event.x ?? 0), // X>0 is right, X<0 is left
                     });
                 }}
                 stop={() => onStop()}
