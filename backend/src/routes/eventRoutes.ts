@@ -68,4 +68,18 @@ router.post("/report", upload.single("frame"), EventReportController.report(pool
 router.get("/", isLoggedIn, hasAccess("events", "read"), EventController.getEvents);
 router.get("/:id/image", EventController.getEventImage);
 
+router.delete(
+    "/",
+    isLoggedIn,
+    hasAccess("events", "delete"),
+    EventController.deleteAllEvents
+);
+
+router.delete(
+    "/:id",
+    isLoggedIn,
+    hasAccess("events", "delete"),
+    EventController.deleteEvent
+);
+
 export default router;

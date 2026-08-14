@@ -81,3 +81,16 @@ export const stopAutoPatrol = async () => {
     const response = await robotApi.post('/robot/autopatrol/stop');
     return response.data;
 };
+
+export const deleteEvent = async (eventId: string) => {
+    const response = await customerApi.delete(
+        `/events/${encodeURIComponent(eventId)}`
+    );
+
+    return response.data;
+};
+
+export const deleteAllEvents = async () => {
+    const response = await customerApi.delete('/events');
+    return response.data;
+};
