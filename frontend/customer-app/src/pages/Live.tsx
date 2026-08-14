@@ -9,7 +9,7 @@ import { useBattery } from '../hooks/robot/useBattery';
 import { useRobot } from '../hooks/robot/useRobot';
 import { useDetectionStatus } from '../hooks/robot/useDetectionStatus';
 import { useAutoPatrolStatus } from '../hooks/robot/useAutoPatrolStatus';
-import { useEvents } from '../hooks/robot/useEvents';
+import { useEventHistory } from '../hooks/robot/useEventHistory';
 import { useFullscreen } from '../hooks/useFullscreen';
 import FullscreenControls from '../components/live/fullscreen/FullscreenControls';
 import { hasCustomerPermission, useCustomerAuth } from '../auth/CustomerAuthProvider';
@@ -20,7 +20,7 @@ export default function Live() {
     const { data: robot } = useRobot();
     const { data: detection } = useDetectionStatus();
     const { data: patrolStatus } = useAutoPatrolStatus();
-    const { data: events, loading: eventsLoading, error: eventsError } = useEvents();
+const { data: events, loading: eventsLoading, error: eventsError } = useEventHistory();
     const fullscreenRef = useRef<HTMLDivElement>(null);
     const { isFullscreen, enterFullscreen, toggleFullscreen } = useFullscreen(fullscreenRef);
     const location = useLocation();
