@@ -5,7 +5,7 @@ import json
 import time
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 import redis
 from psycopg2 import pool
@@ -41,6 +41,8 @@ DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
 
 MEDIA_LOCATION = os.getenv("FRAMES_SAVE_LOCATION", "/tmp/sentryx/media/events/")
+DAILY_AI_LIMIT = int(os.getenv("DAILY_AI_LIMIT", 1300))
+AI_QUOTA_TIMEZONE_OFFSET_HOURS = int(os.getenv("AI_QUOTA_TZ_OFFSET", -8))
 
 logger.info("Worker configured purely for REMOTE AI processing via Gemini API.")
 
@@ -85,6 +87,28 @@ def get_job_key(job_id: str) -> str:
     """Returns the Redis key for a specific BullMQ job."""
     return f"bull:{QUEUE_NAME}:{job_id}"
 
+def seconds_until_quota_reset() -> int:
+    """Gemini's daily quota resets at midnight Pacific, not UTC."""
+    now = datetime.now(timezone.utc) + timedelta(hours=AI_QUOTA_TIMEZONE_OFFSET_HOURS)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((tomorrow - now).total_seconds())
+
+def daily_quota_available() -> bool:
+    """Counts calls to Gemini and stops before the free tier runs out."""
+    if redis_client.exists("ai:paused_until"):
+        return False
+
+    key = "ai:daily_count"
+    used = redis_client.incr(key)
+
+    if used == 1:
+        redis_client.expire(key, seconds_until_quota_reset())
+
+    if used > DAILY_AI_LIMIT:
+        logger.warning("Daily AI limit of %s reached, skipping analysis.", DAILY_AI_LIMIT)
+        return False
+
+    return True
 
 # =========================================================================
 # Custom Exceptions
@@ -167,16 +191,17 @@ def analyze_frame_remotely(image_path: str) -> Dict[str, Any]:
 
     except Exception as e:
         error_msg = str(e).lower()
-        # Catch typical quota, rate limit, and 429 exhaustion keywords
+
         if any(keyword in error_msg for keyword in ["429", "quota", "rate limit", "resource exhausted"]):
-            # Attempt to parse seconds from the error string, fallback to 60s
+            # Gemini reports which limit was hit. A per-day quota will not clear
+            # by waiting a minute, so retrying it only burns attempts.
+            if "perday" in error_msg.replace("_", "").replace("-", ""):
+                raise QuotaExceededError(seconds_until_quota_reset())
+
             match = re.search(r'in (\d+)s', error_msg) or re.search(r'in (\d+) seconds', error_msg)
-            sleep_time = int(match.group(1)) if match else 60
-            raise QuotaExceededError(sleep_time)
+            raise QuotaExceededError(int(match.group(1)) if match else 60)
 
-        # If it's a regular error (timeout, broken connection), raise normally
         raise
-
 
 # =========================================================================
 # Specialized Event Router Handlers
@@ -259,6 +284,19 @@ def process_job(job_id: str):
                     conn.commit()
                     return ProcessingResponse(success=False, fatal=True)
 
+                needs_ai = client_metadata.get("needs_ai", True)
+
+                if not needs_ai or not daily_quota_available():
+                    reason = "robot reported no change" if not needs_ai else "daily AI limit reached"
+                    logger.info("Skipping AI for event %s: %s", event_id, reason)
+
+                    cursor.execute(
+                        "UPDATE events SET status = %s, ai_processing_end_time = %s WHERE id = %s",
+                        ("SKIPPED", datetime.now(timezone.utc), event_id),
+                    )
+                    conn.commit()
+                    return ProcessingResponse(success=True)
+
                 # This is where the QuotaExceededError might be thrown
                 ai_results = handler(image_path=image_path, metadata=client_metadata)
 
@@ -266,8 +304,10 @@ def process_job(job_id: str):
 
                 cursor.execute(
                     """
-                    UPDATE events 
-                    SET status = %s, ai_metadata = %s, ai_processing_end_time = %s 
+                    UPDATE events
+                    SET status = %s,
+                        ai_metadata = COALESCE(ai_metadata, '{}'::jsonb) || %s::jsonb,
+                        ai_processing_end_time = %s
                     WHERE id = %s
                     """,
                     ("COMPLETED", json.dumps(ai_results), end_time, event_id),
@@ -279,15 +319,16 @@ def process_job(job_id: str):
                 return ProcessingResponse(success=True)
 
     except QuotaExceededError as qe:
-        # Mark as failed in Postgres immediately before passing the exception up
-        logger.error(f"Quota exceeded while processing job {job_id}. Marking as FAILURE in DB.")
+        # Not a failure — the call never went out. The retry will skip it too
+        # while the pause is active.
+        logger.warning(f"Quota exceeded on job {job_id}. Marking as SKIPPED and pausing AI calls.")
         if event_id:
             try:
                 with get_db_connection() as conn:
                     with conn.cursor() as cursor:
                         cursor.execute(
                             "UPDATE events SET status = %s, error_message = %s WHERE id = %s",
-                            ("FAILURE", str(qe), event_id)
+                            ("SKIPPED", str(qe), event_id)
                         )
                         conn.commit()
             except Exception as db_e:
@@ -317,8 +358,11 @@ def failure_handler(attempts: int, job_id: str, job_key: str, exception: typing.
         logger.warning(
             f"Job {job_id} failed. Re-inserting to wait queue (Attempt {attempts}/{MAXIMUM_TASK_FAIL_COUNT})")
         redis_client.lpush(WAIT_LIST_KEY, job_id)
-        if exception:
-            time.sleep(min(exception.sleep_seconds, 60) if isinstance(exception, QuotaExceededError) else 1)
+        if isinstance(exception, QuotaExceededError):
+            redis_client.setex("ai:paused_until", exception.sleep_seconds, "1")
+            logger.warning("Pausing AI calls for %s seconds.", exception.sleep_seconds)
+        elif exception:
+            time.sleep(1)
     else:
         logger.error(f"Job {job_id} permanently failed after {MAXIMUM_TASK_FAIL_COUNT} attempts.")
         timestamp = int(time.time() * 1000)

@@ -133,7 +133,7 @@ export default function AiInsightPanel({ aiMetadata, eventStatus }: AiInsightPan
     {
         const status = (eventStatus ?? '').toUpperCase();
 
-        if (status === 'PENDING' || status === 'PROCESSING')
+        if (status === 'PROCESSING')
         {
             return (
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', py: 1 }}>
@@ -141,6 +141,16 @@ export default function AiInsightPanel({ aiMetadata, eventStatus }: AiInsightPan
                     <Typography variant="body2" color="text.secondary">AI is analyzing this frame…</Typography>
                 </Stack>
             );
+        }
+
+        if (status === 'PENDING')
+        {
+            return <Typography variant="body2" color="text.secondary">Queued for AI analysis.</Typography>;
+        }
+
+        if (status === 'SKIPPED')
+        {
+            return <Typography variant="body2" color="text.secondary">Skipped — nothing changed since the last analysis.</Typography>;
         }
 
         if (status === 'FAILURE')
