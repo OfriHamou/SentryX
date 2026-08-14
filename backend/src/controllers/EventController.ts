@@ -16,6 +16,7 @@ function toRobotEvent(event: Event) {
         timestamp: event.createdAt instanceof Date ? event.createdAt.toISOString() : event.createdAt,
         image_filename: event.imagePath ? event.imagePath.split("/").pop() : undefined,
         detections: Array.isArray(meta?.detections) ? meta.detections : undefined,
+        ai_metadata: event.aiMetadata ?? undefined,
         source: "SentryX",
         status: event.status,
     };
@@ -107,6 +108,55 @@ export class EventController {
             res.status(500).json({
                 ok: false,
                 error: "Failed to delete event",
+            });
+        }
+    }
+
+    static async deleteEventImage(req: Request, res: Response): Promise<void> {
+        try {
+            const auth = res.locals.auth as AuthIdentityPayload | undefined;
+
+            if (!auth?.tenantId) {
+                res.status(401).json({ ok: false, error: "Unauthenticated" });
+                return;
+            }
+
+            const repo = AppDataSource.getRepository(Event);
+
+            const event = await repo.findOne({
+                where: {
+                    id: req.params.id,
+                    tenant: { id: auth.tenantId },
+                },
+            });
+
+            if (!event) {
+                res.status(404).json({ ok: false, error: "Event not found" });
+                return;
+            }
+
+            const imagePath = event.imagePath;
+
+            // The row stays so the event still counts in history and statistics.
+            event.imagePath = null as unknown as string;
+            await repo.save(event);
+
+            if (imagePath) {
+                const baseLocation = process.env.frames_to_process_save_location || "/tmp/sentryx/media/events/";
+
+                const filePath = path.resolve(baseLocation, imagePath);
+
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+
+            res.status(200).json({ ok: true });
+        } catch (error) {
+            console.error("Error deleting event image:", error);
+            res.status(500).json({
+                ok: false,
+                error: "Failed to delete event image",
             });
         }
     }

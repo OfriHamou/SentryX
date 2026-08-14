@@ -37,6 +37,7 @@ export interface RobotEvent {
     timestamp: string;
     image_filename?: string;
     detections?: Detection[];
+    ai_metadata?: unknown;
     source?: string;
     status?: string;
 }

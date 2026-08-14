@@ -11,13 +11,32 @@ const COLORS: Record<string, { color: string; bg: string }> = {
     default: { color: '#6B7280', bg: '#F3F4F6' },
 };
 
-interface HistoryEventCardProps { event: RobotEvent; location: string; }
+interface HistoryEventCardProps { event: RobotEvent; location: string; onSelect: (event: RobotEvent) => void; }
 
-export default function HistoryEventCard({ event, location }: HistoryEventCardProps) {
+export default function HistoryEventCard({ event, location, onSelect }: HistoryEventCardProps) {
     const display = getEventDisplay(event);
     const colors = COLORS[display.color] ?? COLORS.default;
     return (
-        <Paper elevation={0} sx={{ p: 2.5, borderRadius: 3, border: '1px solid', borderColor: 'grey.200', borderLeft: '4px solid', borderLeftColor: colors.color }}>
+        <Paper
+            elevation={0}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(event)}
+            onKeyDown={(keyEvent) => {
+                if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                    keyEvent.preventDefault();
+                    onSelect(event);
+                }
+            }}
+            sx={{
+                p: 2.5, borderRadius: 3, border: '1px solid', borderColor: 'grey.200',
+                borderLeft: '4px solid', borderLeftColor: colors.color,
+                cursor: 'pointer',
+                transition: 'box-shadow 120ms',
+                '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.12)' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: colors.color, outlineOffset: 2 },
+            }}
+        >
             <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
                 <Box sx={{ color: colors.color, mt: '2px', display: 'flex' }}>{display.icon}</Box>
                 <Box sx={{ flexGrow: 1 }}>

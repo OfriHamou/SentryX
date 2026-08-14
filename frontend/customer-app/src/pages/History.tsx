@@ -1,10 +1,14 @@
 import { useCallback, useState } from 'react';
-import { Box, Paper, Typography, Grid, Stack, Button } from '@mui/material';
+import { Box, Paper, Typography, Grid, Stack, Button, Dialog, DialogTitle, DialogContent, DialogActions, Divider } from '@mui/material';
 import { EventNote as TotalIcon, GppGood as PatrolIcon, ReportProblem as IncidentIcon, Videocam as VideoIcon } from '@mui/icons-material';
 import HistoryEventCard from '../components/history/HistoryEventCard';
 import StatCard from '../components/dashboard/StatCard';
+import AiInsightPanel from '../components/alerts/AiInsightPanel';
 import { useEventHistory } from '../hooks/robot/useEventHistory';
 import { useRobot } from '../hooks/robot/useRobot';
+import { eventDbImageUrl } from '../api/robot';
+import { getEventDisplay } from '../components/live/activity/eventRegistry';
+import type { RobotEvent } from '../types/robot';
 
 type Range = 'today' | 'week' | 'month';
 const RANGE_MS: Record<Range, number> = {
@@ -23,6 +27,14 @@ export default function History() {
     const changeRange = useCallback((next: Range) => {
         setRange(next);
         setCutoff(Date.now() - RANGE_MS[next]);
+    }, []);
+
+    const [selected, setSelected] = useState<RobotEvent | null>(null);
+    const [imageFailed, setImageFailed] = useState(false);
+
+    const openEvent = useCallback((event: RobotEvent) => {
+        setImageFailed(false);
+        setSelected(event);
     }, []);
 
     const location = robot?.location ?? '—';
@@ -65,9 +77,45 @@ export default function History() {
                 <Typography color="text.secondary">No events in this period</Typography>
             ) : (
                 <Stack spacing={2}>
-                    {visible.map((e) => <HistoryEventCard key={e.id} event={e} location={location} />)}
+                    {visible.map((e) => <HistoryEventCard key={e.id} event={e} location={location} onSelect={openEvent} />)}
                 </Stack>
             )}
+            
+            <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="md">
+                <DialogTitle sx={{ fontWeight: 800 }}>
+                    {selected ? getEventDisplay(selected).title(selected) : 'Event'}
+                </DialogTitle>
+                <DialogContent dividers>
+                    {selected && (
+                        <Stack spacing={2}>
+                            <Typography variant="body2" color="text.secondary">
+                                {location} · {new Date(selected.timestamp).toLocaleString()}
+                            </Typography>
+
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ mb: 1 }}>Event image</Typography>
+                                {selected.image_filename && !imageFailed ? (
+                                    <Box 
+                                        component="img"
+                                        src={eventDbImageUrl(selected.id)}
+                                        alt=""
+                                        onError={() => setImageFailed(true)}
+                                        sx={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'contain', bgcolor: 'grey.100', borderRadius: 2 }}
+                                    />
+                                ) : (
+                                    <Typography variant="body2" color="text.secondary">No image is available for this event.</Typography>
+                                )}
+                            </Box>
+                            <Divider />
+                            <AiInsightPanel aiMetadata={selected.ai_metadata} eventStatus={selected.status} />
+                        </Stack>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSelected(null)}>Close</Button>
+                </DialogActions>
+            </Dialog>
+
         </Box>
     );
 }
