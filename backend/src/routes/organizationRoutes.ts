@@ -39,6 +39,8 @@ router.post("/users", requireAuth, hasAccess("organization_users", "write"), Org
 
 router.put("/users/:id", requireAuth, hasAccess("organization_users", "write"), OrganizationController.updateOrganizationUser);
 
+router.delete("/users/:id", requireAuth, hasAccess("organization_users", "write"), OrganizationController.deleteOrganizationUser);
+
 router.get("/roles", requireAuth, hasAccess("organization_users", "read"), OrganizationController.getOrganizationRoles);
 
 router.get("/robots", requireAuth, hasAccess("organization_robots", "read"), OrganizationRobotController.list);
