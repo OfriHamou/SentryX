@@ -123,7 +123,7 @@ class GmailEmailService {
         return this.transporter;
     }
 
-private async send(message: MailMessage, action: string): Promise<void> {
+    private async send(message: MailMessage, action: string): Promise<void> {
     const transporter = this.getTransporter();
     if (!transporter) {
         return;
@@ -135,10 +135,8 @@ private async send(message: MailMessage, action: string): Promise<void> {
     }
 
     const TIMEOUT_MS = 7000;
-    // Explicitly initialize as undefined to satisfy TypeScript's strict null checks
     let timeoutTimer: NodeJS.Timeout | undefined = undefined;
 
-    // Create a promise that rejects after 7 seconds
     const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutTimer = setTimeout(() => {
             reject(new Error(`Email send operation timed out after ${TIMEOUT_MS}ms`));
@@ -146,7 +144,6 @@ private async send(message: MailMessage, action: string): Promise<void> {
     });
 
     try {
-        // Race the actual email dispatch against the timeout timer
         await Promise.race([
             transporter.sendMail({
                 from: `"${this.fromName}" <${fromAddress}>`,
@@ -166,10 +163,18 @@ private async send(message: MailMessage, action: string): Promise<void> {
             }
         });
     } catch (error: any) {
-        // Log the failure, distinguishing timeouts from standard transport errors
         const isTimeout = error.message?.includes('timed out');
+        const errorMessage = isTimeout ? "Email send timed out" : "Email send failed";
 
-        logger.error(isTimeout ? "Email send timed out" : "Email send failed", error, {
+        // 1. Raw console error to guarantee it prints to your local terminal
+        console.error(`\n❌ [EmailService] ${errorMessage}:`, {
+            error: error.message || error,
+            to: message.to,
+            action
+        });
+
+        // 2. Your existing structured logger
+        logger.error(errorMessage, error, {
             category: "EMAIL",
             action,
             status: "FAILED",
@@ -180,11 +185,7 @@ private async send(message: MailMessage, action: string): Promise<void> {
                 isTimeout
             }
         });
-
-        // Optional: Re-throw if the calling function needs to know the send failed
-        // throw error;
     } finally {
-        // Ensure the timer is cleared so it doesn't keep the Node process alive
         if (timeoutTimer) {
             clearTimeout(timeoutTimer);
         }
