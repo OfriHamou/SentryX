@@ -171,7 +171,7 @@ export default function MediaGallery() {
 
             {timeRange === 'custom' && (
                 <Stack
-                    direction="row"
+                    direction={{ xs: 'column', sm: 'row' }}
                     spacing={2}
                     sx={{ mb: 3 }}
                 >
