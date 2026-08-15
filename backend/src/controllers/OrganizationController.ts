@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { QueryFailedError } from "typeorm";
 import { AppDataSource } from "../db";
 import { Tenant } from "../models/Tenant";
 import { User, UserStatus } from "../models/User";
@@ -251,6 +252,46 @@ export class OrganizationController {
                 context: "OrganizationController"
             });
             res.status(500).json({ message: "Internal server error" });
+        }
+    }
+
+    static async deleteOrganizationUser(req: Request, res: Response) {
+        try {
+            const { userId, tenantId } = res.locals.auth;
+            const { id } = req.params;
+            const userRepository = AppDataSource.getRepository(User);
+
+            const user = await userRepository.findOne({
+                where: { id, tenant: { id: tenantId } },
+            });
+
+            if (!user) {
+                return res.status(404).json({ message: "User not found in this organization" });
+            }
+
+            if (user.id === userId) {
+                return res.status(409).json({ message: "You cannot delete your own user account" });
+            }
+
+            await userRepository.remove(user);
+            return res.status(200).json({ message: "User deleted successfully" });
+        } catch (error) {
+            if (
+                error instanceof QueryFailedError &&
+                (error.driverError as { code?: string } | undefined)?.code === "23503"
+            ) {
+                return res.status(409).json({
+                    message: "This user cannot be deleted because they are referenced by existing operational records.",
+                });
+            }
+
+            logger.error("Error deleting organization user", error, {
+                category: "ORGANIZATION",
+                action: "DELETE_ORGANIZATION_USER_FAILED",
+                status: "FAILED",
+                context: "OrganizationController"
+            });
+            return res.status(500).json({ message: "Internal server error" });
         }
     }
 
