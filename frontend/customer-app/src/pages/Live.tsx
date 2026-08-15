@@ -50,13 +50,12 @@ const { data: events, loading: eventsLoading, error: eventsError } = useEventHis
                 elevation={0}
                 sx={{
                     py: 3,
-                    px: 4,
+                    px: { xs: 2, md: 4 },
                     borderRadius: 3,
                     bgcolor: 'gray.100',
                     display: 'grid',
-                    gridTemplateColumns: '1fr 350px',
-                    gap: 5,
-                    /* alignItems: 'start', */
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 350px' },
+                    gap: { xs: 3, md: 5 },
                 }}
             >
                 <Box 
@@ -67,10 +66,13 @@ const { data: events, loading: eventsLoading, error: eventsError } = useEventHis
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        aspectRatio: { xs: '16 / 9', md: 'auto' },
+                        minWidth: 0,
 
                         '&:fullscreen': {
                             width: '100vw',
                             height: '100vh',
+                            aspectRatio: 'unset',
                         },
 
                         '&:fullscreen > :first-of-type': {
@@ -99,14 +101,13 @@ const { data: events, loading: eventsLoading, error: eventsError } = useEventHis
                     )}
                 </Box>
 
-
                 <ActionPanel canControl={canWriteControl} />
             </Paper>
 
             <Box
                 sx={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                     gap: 3,
                 }}
             >
