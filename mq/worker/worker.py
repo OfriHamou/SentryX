@@ -136,7 +136,7 @@ def analyze_frame_remotely(image_path: str) -> Dict[str, Any]:
 
     try:
         response = ai_client.models.generate_content(
-            model='models/gemini-2.5-flash',
+            model='models/gemini-3.5-flash',
             contents=[img, prompt],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
