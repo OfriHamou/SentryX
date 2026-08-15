@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { Box, IconButton } from '@mui/material';
-import {
-  //FullscreenExit as ExitIcon,
-  Mic as MicIcon,
-  MicOff as MicOffIcon,
-  Notifications as AlarmIcon,
-  Phone as PhoneIcon,
-} from '@mui/icons-material';
+import { Mic as MicIcon, MicOff as MicOffIcon, Notifications as AlarmIcon, Phone as PhoneIcon } from '@mui/icons-material';
 import JoystickControl from '../JoystickControl';
 import { useRobotMove } from '../../../hooks/robot/useRobotMove';
+
+
+const DISABLED_ACTION_SX = {
+    bgcolor: 'rgba(0, 0, 0, 0.4)',
+    color: 'rgba(255, 255, 255, 0.35)',
+};
 
 interface FullscreenControlsProps {
     onExitFullscreen: () => void;
@@ -47,6 +47,7 @@ export default function FullscreenControls({
                 }}
             >
                 <IconButton
+                    disabled
                     onClick={handleTalkToggle}
                     sx={{
                         bgcolor: talking ? 'primary.main' : 'rgba(0, 0, 0, 0.6)',
@@ -54,19 +55,32 @@ export default function FullscreenControls({
                         '&:hover': { 
                             bgcolor: talking ? 'primary.dark' : 'rgba(0, 0, 0, 0.8)',
                         },
+                        '&.Mui-disabled': DISABLED_ACTION_SX,
                     }}
                 >
                     {talking ? <MicIcon /> : <MicOffIcon />}
                 </IconButton>
                 <IconButton
+                    disabled
                     onClick={onAlarm}
-                    sx={{ bgcolor: 'error.main', color: 'white', '&:hover': { bgcolor: 'error.dark' } }}
+                    sx={{
+                        bgcolor: 'error.main',
+                        color: 'white',
+                        '&:hover': { bgcolor: 'error.dark' },
+                        '&.Mui-disabled': DISABLED_ACTION_SX,
+                    }}
                 >
                     <AlarmIcon />
                 </IconButton>
                 <IconButton
+                    disabled
                     onClick={onCallEmergency}
-                    sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
+                    sx={{
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                        '&.Mui-disabled': DISABLED_ACTION_SX,
+                    }}
                 >
                     <PhoneIcon />
                 </IconButton>
