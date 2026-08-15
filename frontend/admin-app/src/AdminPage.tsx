@@ -30,6 +30,7 @@ import { RegistrationRequestsTab } from './components/RegistrationRequestsTab';
 import { LicensesTab } from './components/LicensesTab';
 import { AdminAlertsTab } from './components/AdminAlertsTab';
 import { AdminAnalyticsTab } from './components/AdminAnalyticsTab';
+import { AdminSettings } from './components/AdminSettings';
 import BellNotifications from './components/BellNotifications';
 import { getAdminAlerts } from './api/adminAlerts';
 import type { AdminAlert, AdminAlertCounts } from './types/adminAlert';
@@ -608,7 +609,9 @@ export const AdminPage = ({ onLogout }: AdminPageProps) => {
                 )}
 
                 {activeTab === 'Settings' && (
-                    <PermissionGate allowed={canAccessSettings} deniedMessage="You do not have permission to view this page." />
+                    <PermissionGate allowed={canAccessSettings} deniedMessage="You do not have permission to view this page.">
+                        <AdminSettings />
+                    </PermissionGate>
                 )}
             </Box>
             {/* Create / Edit / Manage Modals... (Preserved Logic, Polished Looks) */}
