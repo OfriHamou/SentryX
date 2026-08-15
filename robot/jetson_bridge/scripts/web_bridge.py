@@ -18,7 +18,7 @@ MAX_OUT = 1.0      # keep within [-1,1] unless you discover higher works
 # Robot currently drifts left when driving forward,
 # so slightly reduce the right motor output.
 LEFT_MOTOR_TRIM = 1.0
-RIGHT_MOTOR_TRIM = 0.96
+RIGHT_MOTOR_TRIM = 0.85
 
 # --- Shared battery state ---
 latest_voltage = None
