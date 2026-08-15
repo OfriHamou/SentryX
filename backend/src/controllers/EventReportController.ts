@@ -22,8 +22,6 @@ export class EventReportController {
                 }
 
                 // Parse robot metadata once.
-                // This contains face recognition data such as:
-                // detections, name, confidence, is_known, etc.
                 let parsedMetadata: Record<string, unknown> = {};
 
                 try {
@@ -40,23 +38,70 @@ export class EventReportController {
                     });
                 }
 
-                // Resolve robot / tenant.
+                // --- QUERY 1: Resolve robot and tenant ---
                 const robotResult = await pool.query(
-                    "SELECT tenant_id, archived_at FROM robots WHERE id = $1",
+                    `SELECT tenant_id, archived_at FROM robots WHERE id = $1`,
                     [robot_id]
                 );
 
                 const robotRow = robotResult.rows[0];
 
-                if (robotRow?.archived_at) {
-                    fs.unlinkSync(file.path);
+                // Robot doesn't exist
+                if (!robotRow) {
+                    if (file) fs.unlinkSync(file.path);
+                    logger.error(`Event report rejected: Robot ${robot_id} not found.`);
+                    return res.status(404).json({
+                        error: "Robot not found",
+                    });
+                }
+
+                // Robot is not part of a tenant
+                if (!robotRow.tenant_id) {
+                    logger.error(`Event report rejected: Robot ${robot_id} is not associated with any tenant. File retained.`);
+                    return res.status(403).json({
+                        error: "Robot is not associated with a tenant",
+                    });
+                }
+
+                // Robot is archived
+                if (robotRow.archived_at) {
+                    if (file) fs.unlinkSync(file.path);
                     return res.status(409).json({
                         message: "Robot is archived",
                     });
                 }
 
-                const tenantId = robotRow?.tenant_id ?? null;
+                const tenantId = robotRow.tenant_id;
 
+                // Check ROBOT_ENABLED license for the resolved tenant ---
+                const licenseResult = await pool.query(
+                    `SELECT license_code, expiration_date 
+                     FROM tenant_licenses 
+                     WHERE tenant_id = $1 AND license_code = 'ROBOT_ENABLED'`,
+                    [tenantId]
+                );
+
+                const licenseRow = licenseResult.rows[0];
+
+                // Missing ROBOT_ENABLED license
+                if (!licenseRow) {
+                    if (file) fs.unlinkSync(file.path);
+                    logger.error(`Event report rejected: Tenant ${tenantId} missing ROBOT_ENABLED license.`);
+                    return res.status(403).json({
+                        error: "Tenant does not have the required ROBOT_ENABLED license",
+                    });
+                }
+
+                // Expired ROBOT_ENABLED license
+                if (licenseRow.expiration_date && new Date(licenseRow.expiration_date) < new Date()) {
+                    if (file) fs.unlinkSync(file.path);
+                    logger.error(`Event report rejected: Tenant ${tenantId} ROBOT_ENABLED license expired.`);
+                    return res.status(403).json({
+                        error: "ROBOT_ENABLED license has expired",
+                    });
+                }
+
+                // Proceed with processing
                 const baseLocation =
                     process.env.frames_to_process_save_location ||
                     "/tmp/sentryx/media/events/";
