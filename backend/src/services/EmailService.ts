@@ -124,46 +124,73 @@ class GmailEmailService {
     }
 
     private async send(message: MailMessage, action: string): Promise<void> {
-        const transporter = this.getTransporter();
-        if (!transporter) {
-            return;
-        }
-
-        const fromAddress = this.gmailUser;
-        if (!fromAddress) {
-            return;
-        }
-
-        try {
-            await transporter.sendMail({
-                from: `"${this.fromName}" <${fromAddress}>`,
-                ...message
-            });
-
-            logger.info("Email sent", {
-                category: "EMAIL",
-                action,
-                status: "SUCCESS",
-                context: "EmailService",
-                metadata: {
-                    to: Array.isArray(message.to) ? message.to : [message.to],
-                    subject: message.subject
-                }
-            });
-        } catch (error) {
-            logger.error("Email send failed", error, {
-                category: "EMAIL",
-                action,
-                status: "FAILED",
-                context: "EmailService",
-                metadata: {
-                    to: Array.isArray(message.to) ? message.to : [message.to],
-                    subject: message.subject
-                }
-            });
-        }
+    const transporter = this.getTransporter();
+    if (!transporter) {
+        return;
     }
 
+    const fromAddress = this.gmailUser;
+    if (!fromAddress) {
+        return;
+    }
+
+    const TIMEOUT_MS = 7000;
+    let timeoutTimer: NodeJS.Timeout | undefined = undefined;
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutTimer = setTimeout(() => {
+            reject(new Error(`Email send operation timed out after ${TIMEOUT_MS}ms`));
+        }, TIMEOUT_MS);
+    });
+
+    try {
+        await Promise.race([
+            transporter.sendMail({
+                from: `"${this.fromName}" <${fromAddress}>`,
+                ...message
+            }),
+            timeoutPromise
+        ]);
+
+        logger.info("Email sent", {
+            category: "EMAIL",
+            action,
+            status: "SUCCESS",
+            context: "EmailService",
+            metadata: {
+                to: Array.isArray(message.to) ? message.to : [message.to],
+                subject: message.subject
+            }
+        });
+    } catch (error: any) {
+        const isTimeout = error.message?.includes('timed out');
+        const errorMessage = isTimeout ? "Email send timed out" : "Email send failed";
+
+        // 1. Raw console error to guarantee it prints to your local terminal
+        console.error(`\n❌ [EmailService] ${errorMessage}:`, {
+            error: error.message || error,
+            to: message.to,
+            action
+        });
+
+        // 2. Your existing structured logger
+        logger.error(errorMessage, error, {
+            category: "EMAIL",
+            action,
+            status: "FAILED",
+            context: "EmailService",
+            metadata: {
+                to: Array.isArray(message.to) ? message.to : [message.to],
+                subject: message.subject,
+                isTimeout
+            }
+        });
+    } finally {
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+        }
+    }
+}
     async sendCustomerRegistrationConfirmation(payload: PendingRegistrationEmail): Promise<void> {
         const tenantName = payload.tenantName || "your organization";
         const supportLine = this.supportEmail ? `If you need help, contact ${this.supportEmail}.` : "";
