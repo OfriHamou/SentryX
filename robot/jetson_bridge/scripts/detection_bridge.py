@@ -97,7 +97,7 @@ def build_annotated_frame(frame, detections):
     metadata = {
         "detections": detections,
         "is_alert": not any_known,
-        "needs_ai": needs_ai_analysis(detections),
+        "needs_ai": True,
         "source": "SentryX_Smart_Vision",
         "reported_at": ts.isoformat()
     }
