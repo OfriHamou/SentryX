@@ -123,47 +123,73 @@ class GmailEmailService {
         return this.transporter;
     }
 
-    private async send(message: MailMessage, action: string): Promise<void> {
-        const transporter = this.getTransporter();
-        if (!transporter) {
-            return;
-        }
-
-        const fromAddress = this.gmailUser;
-        if (!fromAddress) {
-            return;
-        }
-
-        try {
-            await transporter.sendMail({
-                from: `"${this.fromName}" <${fromAddress}>`,
-                ...message
-            });
-
-            logger.info("Email sent", {
-                category: "EMAIL",
-                action,
-                status: "SUCCESS",
-                context: "EmailService",
-                metadata: {
-                    to: Array.isArray(message.to) ? message.to : [message.to],
-                    subject: message.subject
-                }
-            });
-        } catch (error) {
-            logger.error("Email send failed", error, {
-                category: "EMAIL",
-                action,
-                status: "FAILED",
-                context: "EmailService",
-                metadata: {
-                    to: Array.isArray(message.to) ? message.to : [message.to],
-                    subject: message.subject
-                }
-            });
-        }
+private async send(message: MailMessage, action: string): Promise<void> {
+    const transporter = this.getTransporter();
+    if (!transporter) {
+        return;
     }
 
+    const fromAddress = this.gmailUser;
+    if (!fromAddress) {
+        return;
+    }
+
+    const TIMEOUT_MS = 7000;
+    // Explicitly initialize as undefined to satisfy TypeScript's strict null checks
+    let timeoutTimer: NodeJS.Timeout | undefined = undefined;
+
+    // Create a promise that rejects after 7 seconds
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutTimer = setTimeout(() => {
+            reject(new Error(`Email send operation timed out after ${TIMEOUT_MS}ms`));
+        }, TIMEOUT_MS);
+    });
+
+    try {
+        // Race the actual email dispatch against the timeout timer
+        await Promise.race([
+            transporter.sendMail({
+                from: `"${this.fromName}" <${fromAddress}>`,
+                ...message
+            }),
+            timeoutPromise
+        ]);
+
+        logger.info("Email sent", {
+            category: "EMAIL",
+            action,
+            status: "SUCCESS",
+            context: "EmailService",
+            metadata: {
+                to: Array.isArray(message.to) ? message.to : [message.to],
+                subject: message.subject
+            }
+        });
+    } catch (error: any) {
+        // Log the failure, distinguishing timeouts from standard transport errors
+        const isTimeout = error.message?.includes('timed out');
+
+        logger.error(isTimeout ? "Email send timed out" : "Email send failed", error, {
+            category: "EMAIL",
+            action,
+            status: "FAILED",
+            context: "EmailService",
+            metadata: {
+                to: Array.isArray(message.to) ? message.to : [message.to],
+                subject: message.subject,
+                isTimeout
+            }
+        });
+
+        // Optional: Re-throw if the calling function needs to know the send failed
+        // throw error;
+    } finally {
+        // Ensure the timer is cleared so it doesn't keep the Node process alive
+        if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+        }
+    }
+}
     async sendCustomerRegistrationConfirmation(payload: PendingRegistrationEmail): Promise<void> {
         const tenantName = payload.tenantName || "your organization";
         const supportLine = this.supportEmail ? `If you need help, contact ${this.supportEmail}.` : "";
