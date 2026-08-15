@@ -218,8 +218,8 @@ class YahboomObjectDetector(object):
         # Check all conditions
         score_ok = detection.get("score", 0.0) >= 0.50
         center_ok = 0.20 <= center_x <= 0.80
-        ymax_ok = ymax >= 0.50
-        area_ok = box_area >= 0.08
+        ymax_ok = ymax >= 0.58
+        area_ok = box_area >= 0.10
         
         return score_ok and center_ok and ymax_ok and area_ok
     
