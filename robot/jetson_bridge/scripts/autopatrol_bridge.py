@@ -48,7 +48,6 @@ OBSTACLE_CENTER_MAX = 0.80
 OBSTACLE_YMAX_MIN = 0.50
 OBSTACLE_AREA_MIN = 0.08
 CONSECUTIVE_OBSTACLE_THRESHOLD = 2  # detections in a row
-CLEAR_PATH_REARM_THRESHOLD = 3  # clear detections before avoidance can trigger again
 
 # Timeouts
 FRAME_TIMEOUT_SECONDS = 1.0
@@ -368,17 +367,15 @@ def patrol_loop():
     global obstacle_counter
     global active
     global last_action
-    
+
     obstacle_counter = 0
-    avoidance_armed = True
-    clear_path_counter = 0
-    
+
     while True:
         # Check if still active
         with active_lock:
             if not active:
                 break
-        
+
         # Get latest frame
         frame, frame_time = get_latest_frame()
         if frame is None:
@@ -391,54 +388,37 @@ def patrol_loop():
             with action_lock:
                 last_action = "stopped"
             break
-        
+
         # Run detection
         obstacles = detect_obstacles(frame)
-        
+
         if len(obstacles) > 0:
-            clear_path_counter = 0
+            obstacle_counter += 1
 
-            if avoidance_armed:
-                obstacle_counter += 1
-            else:
-                obstacle_counter = 0
-        else:
-            obstacle_counter = 0
-
-            if not avoidance_armed:
-                clear_path_counter += 1
-                if clear_path_counter >= CLEAR_PATH_REARM_THRESHOLD:
-                    avoidance_armed = True
-                    clear_path_counter = 0
-        
-        # Trigger one avoidance, then wait for a clear path before re-arming.
-        if avoidance_armed and obstacle_counter >= CONSECUTIVE_OBSTACLE_THRESHOLD:
-            obstacle_counter = 0
-            avoidance_armed = False
-            clear_path_counter = 0
-
-            perform_avoidance()
-
-            with active_lock:
-                if not active:
-                    break
-
-            continue
-
-        # If the previous obstacle is still visible, do not repeat avoidance
-        # and do not drive forward into it.
-        if not avoidance_armed and len(obstacles) > 0:
+            # Stop while confirming the obstacle so the robot does not
+            # continue driving toward it during the confirmation frames.
             send_stop_command()
-            with action_lock:
-                last_action = "waiting_clear"
+
+            # Once the obstacle is confirmed, perform an avoidance maneuver.
+            # If it is still visible afterward, the next detections can
+            # trigger another avoidance instead of waiting indefinitely.
+            if obstacle_counter >= CONSECUTIVE_OBSTACLE_THRESHOLD:
+                obstacle_counter = 0
+                perform_avoidance()
+
+                with active_lock:
+                    if not active:
+                        break
+
             time.sleep(INFERENCE_INTERVAL_SECONDS)
             continue
 
+        # Clear path: reset confirmation counter and continue forward.
+        obstacle_counter = 0
         send_move_command(FORWARD_SPEED, 0.0)
         with action_lock:
             last_action = "forward"
-        
-        # Sleep for inference interval
+
         time.sleep(INFERENCE_INTERVAL_SECONDS)
 
 # --- REST API Endpoints ---
