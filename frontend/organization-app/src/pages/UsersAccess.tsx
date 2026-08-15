@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutlined';
 import BlockIcon from '@mui/icons-material/Block';
+import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import {
   Alert,
@@ -48,6 +49,15 @@ const getStatusChipSx = (status: OrganizationTenantUser['status']) => {
   return { backgroundColor: '#FFF9E6', color: '#D97706' };
 };
 
+const getDeleteErrorMessage = (error: unknown): string => {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response;
+    return response?.data?.message || 'Failed to delete user.';
+  }
+
+  return 'Failed to delete user.';
+};
+
 const UsersAccess: React.FC = () => {
   const { user } = useOrganizationAuth();
   const allowedPages = user?.allowedPages;
@@ -61,6 +71,7 @@ const UsersAccess: React.FC = () => {
   const [rolesError, setRolesError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<OrganizationTenantUser | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const fetchRoles = useCallback(async () => {
     if (!canReadUsers) {
@@ -84,13 +95,15 @@ const UsersAccess: React.FC = () => {
     }
   }, [canReadUsers]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (showLoading = true) => {
     if (!canReadUsers) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (showLoading) {
+      setLoading(true);
+    }
     setError('');
 
     try {
@@ -100,7 +113,9 @@ const UsersAccess: React.FC = () => {
     } catch {
       setError('Failed to load users.');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, [canReadUsers, fetchRoles]);
 
@@ -124,6 +139,29 @@ const UsersAccess: React.FC = () => {
     }
     setSelectedUser(tenantUser);
     setModalOpen(true);
+  };
+
+  const handleDelete = async (tenantUser: OrganizationTenantUser) => {
+    if (tenantUser.id === user?.id) {
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete "${tenantUser.fullName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setError('');
+    setDeletingUserId(tenantUser.id);
+
+    try {
+      await api.delete(`/organization/users/${tenantUser.id}`);
+      setUsers(currentUsers => currentUsers.filter(currentUser => currentUser.id !== tenantUser.id));
+      await fetchData(false);
+    } catch (requestError) {
+      setError(getDeleteErrorMessage(requestError));
+    } finally {
+      setDeletingUserId(null);
+    }
   };
 
   return (
@@ -272,6 +310,20 @@ const UsersAccess: React.FC = () => {
                               <EditIcon />
                             </IconButton>
                           </Tooltip>
+                          {tenantUser.id !== user?.id && (
+                            <Tooltip title="Delete">
+                              <span>
+                                <IconButton
+                                  aria-label={`Delete ${tenantUser.fullName}`}
+                                  onClick={() => handleDelete(tenantUser)}
+                                  disabled={deletingUserId === tenantUser.id}
+                                  sx={{ color: '#EE5D50', '&:hover': { backgroundColor: '#FDECEB' } }}
+                                >
+                                  {deletingUserId === tenantUser.id ? <CircularProgress size={22} color="inherit" /> : <DeleteIcon />}
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                         </PermissionGate>
                       </TableCell>
                     </TableRow>
