@@ -87,6 +87,9 @@ export class AuthController {
         try {
             const { tenantInviteCode, email, password, fullName, phone, jobTitle } = req.body as RegistrationRequestDTO;
 
+            logger.info("1");
+            console.log("1");
+
             // Validate email
             if (!email || !isValidEmail(email)) {
                 res.status(400).json({ message: "A valid email is required" });
@@ -104,7 +107,8 @@ export class AuthController {
                 res.status(400).json({ message: "Organization ID / Invite Code is required" });
                 return;
             }
-
+            logger.info("2");
+            console.log("2");
             const normalizedEmail = email.trim().toLowerCase();
             const normalizedInviteCode = tenantInviteCode.trim().toUpperCase();
 
@@ -126,7 +130,8 @@ export class AuthController {
                 res.status(409).json({ message: "Email is already registered" });
                 return;
             }
-
+            logger.info("3");
+            console.log("3");
             // Find tenant by invite code
             const tenant = await tenantRepo.findOneBy({ inviteCode: normalizedInviteCode });
             if (!tenant) {
@@ -161,6 +166,8 @@ export class AuthController {
                 return;
             }
 
+            logger.info("4");
+            console.log("4");
             // Hash password
             const passwordHash = await hashPassword(password);
 
@@ -173,6 +180,8 @@ export class AuthController {
                 status: UserStatus.PENDING_APPROVAL
             };
 
+            logger.info("5");
+            console.log("5");
             if (typeof fullName === "string" && fullName.trim().length > 0) {
                 newUserData.fullName = fullName.trim();
             }
@@ -185,14 +194,18 @@ export class AuthController {
                 newUserData.jobTitle = jobTitle.trim();
             }
 
+            logger.info("6");
+            console.log("6");
             const createdUser = userRepo.create(newUserData);
             const savedUser = await userRepo.save(createdUser);
-
+            logger.info("7");
+            console.log("7");
             const userWithRelations = await userRepo.findOne({
                 where: { id: savedUser.id },
                 relations: ["tenant", "role"]
             });
-
+            logger.info("8");
+            console.log("8");
             if (!userWithRelations) {
                 logger.error("Register failed", undefined, buildAuthMeta(req, {
                     category: "AUTH",
@@ -206,7 +219,8 @@ export class AuthController {
                 res.status(500).json({ message: "Unable to load created user" });
                 return;
             }
-
+            logger.info("9");
+            console.log("9");
             logger.info("Register pending created", buildAuthMeta(req, {
                 category: "AUTH",
                 action: "REGISTER_PENDING_CREATED",
@@ -219,7 +233,8 @@ export class AuthController {
                     status: userWithRelations.status
                 }
             }));
-
+            logger.info("10");
+            console.log("10");
             await Promise.all([
                 EmailService.sendCustomerRegistrationConfirmation({
                     customerEmail: userWithRelations.email,
@@ -234,6 +249,8 @@ export class AuthController {
                 })
             ]);
 
+            logger.info("11");
+            console.log("11");
             res.status(201).json({
                 message: "Registration request submitted and pending SentryX admin approval",
                 status: "PENDING_APPROVAL"

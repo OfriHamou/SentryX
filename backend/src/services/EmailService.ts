@@ -167,7 +167,8 @@ class GmailEmailService {
     async sendCustomerRegistrationConfirmation(payload: PendingRegistrationEmail): Promise<void> {
         const tenantName = payload.tenantName || "your organization";
         const supportLine = this.supportEmail ? `If you need help, contact ${this.supportEmail}.` : "";
-
+        logger.info("12");
+        console.log("12");
         await this.send({
             to: payload.customerEmail,
             subject: "Your SentryX registration is pending approval",
@@ -185,6 +186,8 @@ class GmailEmailService {
                 ${supportLine ? `<p>${escapeHtml(supportLine)}</p>` : ""}
             `
         }, "CUSTOMER_REGISTRATION_CONFIRMATION");
+        logger.info("13");
+        console.log("13");
     }
 
     async sendSuperAdminRegistrationNotification(payload: AdminRegistrationNotificationEmail): Promise<void> {
