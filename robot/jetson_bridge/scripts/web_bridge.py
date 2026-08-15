@@ -17,8 +17,8 @@ MAX_OUT = 1.0      # keep within [-1,1] unless you discover higher works
 # --- Motor calibration ---
 # Robot currently drifts left when driving forward,
 # so slightly reduce the right motor output.
-LEFT_MOTOR_TRIM = 1.0
-RIGHT_MOTOR_TRIM = 0.65
+LEFT_MOTOR_TRIM = 0.65
+RIGHT_MOTOR_TRIM = 1.00
 
 # --- Shared battery state ---
 latest_voltage = None
