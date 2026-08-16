@@ -7,7 +7,7 @@ import whyIsNodeRunning from "why-is-node-running";
 blockedAt((time: number, stack: string[]) => {
     console.error(`🚨 [BLOCK DETECTED] Event loop was blocked for ${time}ms!`);
     console.error(stack.join("\n"));
-}, { threshold: 100 });
+}, { threshold: 5000 });
 
 import dotenv from "dotenv";
 import path from "path";
