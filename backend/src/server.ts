@@ -1,3 +1,14 @@
+// @ts-ignore
+import blockedAt from "blocked-at";
+// @ts-ignore
+import whyIsNodeRunning from "why-is-node-running";
+
+// Hook event loop block detection immediately at process startup
+blockedAt((time: number, stack: string[]) => {
+    console.error(`🚨 [BLOCK DETECTED] Event loop was blocked for ${time}ms!`);
+    console.error(stack.join("\n"));
+}, { threshold: 100 });
+
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
@@ -73,6 +84,18 @@ function initializeRoutes(app: express.Application) {
 
     app.get("/api/health", (req, res) => {
         res.status(200).json({ status: "OK" });
+    });
+
+    // Diagnostic endpoint to dump active open handles and pending promises
+    app.get("/api/debug/active-handles", (req, res) => {
+        console.log("=== [DEBUG] DUMPING ACTIVE HANDLES & ASYNC REQUESTS ===");
+        try {
+            whyIsNodeRunning();
+            res.status(200).json({ message: "Active handles dumped to server standard output." });
+        } catch (err: any) {
+            console.error("[debug] Error dumping handles:", err);
+            res.status(500).json({ error: err?.message || "Failed to inspect handles" });
+        }
     });
 
     // Documentation routes must be mounted before the frontend fallback.
